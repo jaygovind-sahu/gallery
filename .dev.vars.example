@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+# Skips the Cloudflare Access check on /admin and /api/admin. Ignored on the production hostname.
+DEV_BYPASS_AUTH=1
+OWNER_EMAIL=you@example.com

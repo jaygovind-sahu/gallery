@@ -1,0 +1,24 @@
+---
+// Milestone 1 placeholder for a category page. Milestone 5 adds the gallery itself.
+import Base from '../../layouts/Base.astro';
+import { getCategoryBySlug, listCategories } from '../../lib/db';
+
+const slug = Astro.params.slug ?? '';
+const [category, categories] = await Promise.all([getCategoryBySlug(slug), listCategories()]);
+
+if (!category) {
+  return new Response('Not found', { status: 404 });
+}
+
+const countLabel = `${category.photoCount} ${category.photoCount === 1 ? 'photo' : 'photos'}`;
+---
+
+<Base title={`${category.name} — Jaygovind Sahu`} categories={categories} activeSlug={category.slug}>
+  <div class="flex flex-col gap-2.5 pb-9 pt-12">
+    <h1 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">{category.name}</h1>
+    <p class="m-0 text-sm text-ink-muted">
+      {countLabel}{category.description ? ` · ${category.description}` : ''}
+    </p>
+  </div>
+  <p class="pb-16 text-sm text-ink-muted">No photos in this category yet.</p>
+</Base>

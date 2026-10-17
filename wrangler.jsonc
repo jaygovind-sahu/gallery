@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gallery",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Private bucket for full-resolution originals. Never give it public access.
+  "r2_buckets": [{ "binding": "ORIGINALS", "bucket_name": "gallery-originals" }],
+
+  // Replace database_id with the id printed by `pnpm wrangler d1 create gallery-db`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gallery-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Cloudflare Images binding: resizes originals and draws the watermark.
+  "images": { "binding": "IMAGES" },
+
+  // Creates the DNS record for the subdomain on deploy.
+  "routes": [{ "pattern": "gallery.jaygovindsahu.com", "custom_domain": true }],
+
+  // Public, non-secret settings. OWNER_EMAIL is a secret: `pnpm wrangler secret put OWNER_EMAIL`.
+  "vars": {
+    "SITE_URL": "https://gallery.jaygovindsahu.com",
+    "ACCESS_TEAM_DOMAIN": "<team>.cloudflareaccess.com",
+    "ACCESS_AUD": "<Access application AUD tag>"
+  },
+
+  "observability": { "enabled": true }
+}

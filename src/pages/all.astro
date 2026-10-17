@@ -1,0 +1,14 @@
+---
+// Milestone 1 placeholder. Milestone 5 lists every published photo by sort_order.
+import Base from '../layouts/Base.astro';
+import { listCategories } from '../lib/db';
+
+const categories = await listCategories();
+---
+
+<Base title="All photos — Jaygovind Sahu" categories={categories}>
+  <div class="flex flex-col gap-2.5 pb-9 pt-12">
+    <h1 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">All photos</h1>
+  </div>
+  <p class="pb-16 text-sm text-ink-muted">No photos yet.</p>
+</Base>

@@ -1,0 +1,33 @@
+---
+// Milestone 1 placeholder: proves the page reads categories from D1.
+// Milestone 5 replaces the body with the latest photos in the gallery layout.
+import Base from '../layouts/Base.astro';
+import { getSetting, listCategories } from '../lib/db';
+
+const [categories, siteTitle] = await Promise.all([listCategories(), getSetting('site_title')]);
+---
+
+<Base title={siteTitle ?? 'Gallery'} categories={categories}>
+  <h1 class="sr-only">Latest photos</h1>
+  <section class="flex flex-col gap-6 py-16">
+    <p class="font-serif text-3xl text-ink sm:text-4xl">No photos yet.</p>
+    <p class="max-w-prose text-sm leading-relaxed text-ink-muted">
+      The gallery is set up and connected to its database. Photos will appear here once uploads are built (milestone 3).
+    </p>
+    <ul class="flex flex-wrap gap-3 pt-2" aria-label="Categories">
+      {
+        categories.map((c) => (
+          <li>
+            <a
+              href={`/c/${c.slug}`}
+              class="inline-flex items-baseline gap-2 rounded-full border border-divider px-4 py-2 text-sm transition-colors hover:border-ink-muted"
+            >
+              <span class="text-ink">{c.name}</span>
+              <span class="text-xs text-ink-muted">{c.photoCount}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</Base>
