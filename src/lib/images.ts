@@ -26,12 +26,41 @@ export function parseSize(raw: string | undefined | null): Size | null {
   return (SIZES as readonly number[]).includes(n) && String(n) === raw ? (n as Size) : null;
 }
 
+/** Parse the `v<version>` path segment of an image URL; only `v` + a positive integer without leading zeros passes. */
+export function parseVersion(raw: string | undefined | null): number | null {
+  if (!raw || !/^v[1-9]\d*$/.test(raw)) return null;
+  const n = Number(raw.slice(1));
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** Public derivative URL: `/img/<photoId>/v<version>/<size>`. */
+export function imageUrl(photoId: string, version: number, size: Size): string {
+  return `/img/${photoId}/v${version}/${size}`;
+}
+
+/** `srcset` value for the given sizes, each with its width descriptor. */
+export function srcSet(photoId: string, version: number, sizes: readonly Size[]): string {
+  return sizes.map((s) => `${imageUrl(photoId, version, s)} ${s}w`).join(', ');
+}
+
 export type OutputFormat = 'image/avif' | 'image/webp';
 
 /** AVIF when the client accepts it, otherwise WebP. Two formats only. */
 export function pickFormat(accept: string | null | undefined): OutputFormat {
   const a = (accept ?? '').toLowerCase();
   return a.includes('image/avif') ? 'image/avif' : 'image/webp';
+}
+
+/** Headers on every public derivative: a year, immutable (the version in the URL busts the cache on replace). */
+export const PUBLIC_IMAGE_HEADERS: Readonly<Record<string, string>> = {
+  'cache-control': 'public, max-age=31536000, immutable',
+  vary: 'Accept',
+  'content-disposition': 'inline',
+};
+
+/** Cloudflare Images returns 9422 when the plan's monthly transformations are used up. */
+export function isImagesQuotaError(err: unknown): boolean {
+  return (err as { code?: number } | null)?.code === 9422;
 }
 
 /** Allowed upload types; HEIC and RAW are out of scope for v1. */

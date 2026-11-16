@@ -11,8 +11,8 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | 1. Scaffold (Astro + Cloudflare, D1 schema and seeds, watermark) | done |
 | 2. Auth + admin shell | done |
 | 3. Upload | done |
-| 4. Image route | next (the private admin preview route is already in) |
-| 5. Public gallery | — |
+| 4. Image route | done |
+| 5. Public gallery | next |
 | 6. Admin management | done |
 | 7. Polish + deploy | — |
 
@@ -84,3 +84,7 @@ Other scripts:
 - Replace sends the browser-computed display size, ThumbHash and EXIF orientation as `X-Width`, `X-Height`, `X-Placeholder` and `X-Exif-Orientation` headers alongside the raw body; "re-read EXIF" is a follow-up `PATCH` from the browser, which is where the EXIF parser lives.
 - Deleting a photo removes every object under `originals/<id>/` in R2, not just the current version.
 - Category reordering uses up/down buttons; drag-and-drop (dnd-kit, mouse, touch with a short hold, keyboard) is reserved for photo order within a category, where it matters.
+- Public image route `/img/:id/v:version/:size`: the row is read from D1 on every request (before the cache), the edge cache is `caches.default` keyed by `https://img-cache.internal/<id>/v<version>/<size>.<avif|webp>`, and the cache write happens in `waitUntil`. Only a well-formed ULID is looked up; anything else is a 404 without a query.
+- The watermark PNG is read through the `ASSETS` binding (the adapter's static-asset binding, also present in `astro dev`) and kept in memory per isolate; a plain `fetch` of `/watermark.png` is the fallback if the binding is missing.
+- The local Images binding (miniflare + sharp) only applies rotate, resize and the output format: it ignores `draw()` and `quality`, so derivatives in `astro dev` carry no watermark. To check the watermark locally, set `"images": { "binding": "IMAGES", "remote": true }` in `wrangler.jsonc` (needs `wrangler login`; D1 and R2 stay local) and run `REMOTE_IMAGES=1 pnpm test:e2e tests/e2e/images.spec.ts`. The metadata check passes locally because sharp strips EXIF, XMP and IPTC on output, as the production service does.
+- When Cloudflare Images reports 9422 (monthly transformations used up) the route logs it and answers 503 with `Retry-After: 3600`, never the original. Any other transform failure is a 503 in production and, in local dev only, the original bytes with `no-store`.

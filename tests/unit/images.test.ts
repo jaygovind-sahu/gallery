@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cacheKey, isUploadMime, originalKey, parseSize, pickFormat, SIZE_SPECS, SIZES } from '../../src/lib/images';
+import { cacheKey, imageUrl, isImagesQuotaError, isUploadMime, originalKey, parseSize, parseVersion, pickFormat, SIZE_SPECS, SIZES, srcSet } from '../../src/lib/images';
 import { reconcileDimensions } from '../../src/lib/originals-pure';
 
 describe('size allowlist', () => {
@@ -16,6 +16,31 @@ describe('size allowlist', () => {
     expect(SIZE_SPECS[1080].watermark).toBe(false);
     expect(SIZE_SPECS[1600].watermark).toBe(true);
     expect(SIZE_SPECS[3200].watermark).toBe(true);
+  });
+});
+
+describe('parseVersion', () => {
+  it('accepts v + a positive integer', () => {
+    expect(parseVersion('v1')).toBe(1);
+    expect(parseVersion('v12')).toBe(12);
+  });
+  it('rejects everything else', () => {
+    for (const bad of ['1', 'v0', 'v01', 'v-1', 'v1.0', 'V1', 'v', '', 'v1e3', undefined, null]) {
+      expect(parseVersion(bad)).toBeNull();
+    }
+  });
+});
+
+describe('public URLs', () => {
+  it('builds the image URL and srcset', () => {
+    expect(imageUrl('01ABC', 2, 480)).toBe('/img/01ABC/v2/480');
+    expect(srcSet('01ABC', 1, [480, 768, 1080])).toBe('/img/01ABC/v1/480 480w, /img/01ABC/v1/768 768w, /img/01ABC/v1/1080 1080w');
+  });
+  it('recognises the Images quota error', () => {
+    expect(isImagesQuotaError({ code: 9422 })).toBe(true);
+    expect(isImagesQuotaError({ code: 9412 })).toBe(false);
+    expect(isImagesQuotaError(new Error('x'))).toBe(false);
+    expect(isImagesQuotaError(null)).toBe(false);
   });
 });
 

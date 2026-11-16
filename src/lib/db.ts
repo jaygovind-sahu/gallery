@@ -76,9 +76,41 @@ export async function getSetting(key: string): Promise<string | null> {
   return row?.value ?? null;
 }
 
-// ───────────────────────── Photos (admin) ─────────────────────────
+// ───────────────────────── Photos (image route) ─────────────────────────
 
 export type PhotoStatus = 'uploading' | 'ready';
+
+/** What the public image route needs to serve a derivative. Server-side only: holds the R2 key. */
+export interface ImageSource {
+  r2Key: string;
+  version: number;
+  status: PhotoStatus;
+  published: boolean;
+  watermark: boolean;
+  width: number;
+  height: number;
+  mime: string;
+}
+
+export async function getImageSource(id: string): Promise<ImageSource | null> {
+  const row = await db()
+    .prepare('SELECT r2_key, version, status, published, watermark, width, height, mime FROM photos WHERE id = ?')
+    .bind(id)
+    .first<{ r2_key: string; version: number; status: PhotoStatus; published: number; watermark: number; width: number; height: number; mime: string }>();
+  if (!row) return null;
+  return {
+    r2Key: row.r2_key,
+    version: row.version,
+    status: row.status,
+    published: row.published === 1,
+    watermark: row.watermark === 1,
+    width: row.width,
+    height: row.height,
+    mime: row.mime,
+  };
+}
+
+// ───────────────────────── Photos (admin) ─────────────────────────
 
 /** Everything about a photo, for the admin only. Never send this shape to a public page. */
 export interface AdminPhoto {
