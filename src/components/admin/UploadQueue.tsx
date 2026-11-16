@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { EMPTY_METADATA, makePreview, readMetadata, type ParsedMetadata, type Preview } from '../../lib/client/metadata';
-import { api, formatBytes, putFile, withRetry, RequestFailed } from '../../lib/client/upload';
+import { api, formatBytes, putFile, withRetry, RequestFailed } from '../../lib/client/http';
 import { exifLine, formatTakenAt } from '../../lib/exif-format';
+import { useHydrated } from './ui';
 
 export interface CategoryOption {
   id: string;
@@ -58,6 +59,7 @@ export default function UploadQueue({ categories, locations }: Props) {
   const inflight = useRef(0);
   const readChain = useRef<Promise<void>>(Promise.resolve());
   const fileInput = useRef<HTMLInputElement>(null);
+  const hydrated = useHydrated();
 
   itemsRef.current = items;
   sharedRef.current = shared;
@@ -227,6 +229,7 @@ export default function UploadQueue({ categories, locations }: Props) {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       className="flex flex-col gap-8"
+      data-hydrated={hydrated || undefined}
     >
       <section
         className={`flex flex-col items-start gap-4 rounded-md border border-dashed p-5 transition-colors ${dragging ? 'border-ink bg-surface' : 'border-divider'}`}

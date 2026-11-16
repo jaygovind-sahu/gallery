@@ -5,6 +5,7 @@
 import { env } from 'cloudflare:workers';
 import { ApiError } from './api';
 import { isUploadMime, MAX_UPLOAD_BYTES, type UploadMime } from './images';
+import { reconcileDimensions, type BrowserHint } from './originals-pure';
 
 export interface StoredOriginal {
   key: string;
@@ -16,13 +17,6 @@ export interface StoredOriginal {
   unverified: boolean;
   /** Why verification was skipped (dev only). */
   unverifiedReason?: string;
-}
-
-interface BrowserHint {
-  width: number;
-  height: number;
-  /** EXIF orientation 1–8 if the browser read one. */
-  orientation?: number | null;
 }
 
 function isProduction(request: Request): boolean {
@@ -94,17 +88,4 @@ export async function storeOriginal(request: Request, key: string, hint: Browser
 
   const dims = info ? reconcileDimensions(info.width, info.height, hint) : { width: hint.width, height: hint.height };
   return { key, mime: contentType, bytes: stored.size, width: dims.width, height: dims.height, unverified: !info, unverifiedReason };
-}
-
-/**
- * The binding reports the stored pixel grid; the browser reports the display size after EXIF rotation.
- * If they describe the same grid (possibly swapped), keep the browser's orientation of the server's numbers.
- * Otherwise the browser was wrong: use the server's numbers, swapped if EXIF says the image is rotated.
- */
-export function reconcileDimensions(serverW: number, serverH: number, hint: BrowserHint): { width: number; height: number } {
-  const sameGrid =
-    (hint.width === serverW && hint.height === serverH) || (hint.width === serverH && hint.height === serverW);
-  if (sameGrid) return { width: hint.width, height: hint.height };
-  const rotated = hint.orientation !== undefined && hint.orientation !== null && hint.orientation >= 5;
-  return rotated ? { width: serverH, height: serverW } : { width: serverW, height: serverH };
 }

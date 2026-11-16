@@ -315,6 +315,8 @@ export async function updatePhoto(id: string, patch: PatchPhotoInput): Promise<v
   if (patch.shutterS !== undefined) col('shutter_s', patch.shutterS);
   if (patch.iso !== undefined) col('iso', patch.iso);
   if (patch.exposureComp !== undefined) col('exposure_comp', patch.exposureComp);
+  if (patch.gpsLat !== undefined) col('gps_lat', patch.gpsLat);
+  if (patch.gpsLng !== undefined) col('gps_lng', patch.gpsLng);
 
   const statements: D1PreparedStatement[] = [];
   if (sets.length) {
@@ -480,9 +482,14 @@ export async function updateCategory(
     .run();
 }
 
+/** Put the given categories first, in that order; any category not listed keeps its relative order after them. */
 export async function reorderCategories(idsInOrder: string[]): Promise<void> {
+  const existing = await listAdminCategories();
+  const known = new Set(existing.map((c) => c.id));
+  const given = uniq(idsInOrder).filter((id) => known.has(id));
+  const rest = existing.map((c) => c.id).filter((id) => !given.includes(id));
   await db().batch(
-    renumber(idsInOrder).map(({ id, position }) => db().prepare('UPDATE categories SET position = ? WHERE id = ?').bind(position, id)),
+    renumber([...given, ...rest]).map(({ id, position }) => db().prepare('UPDATE categories SET position = ? WHERE id = ?').bind(position, id)),
   );
 }
 

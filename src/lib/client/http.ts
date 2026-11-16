@@ -1,4 +1,4 @@
-/** HTTP helpers for the upload queue: JSON calls with retries and an XHR PUT with progress. */
+/** HTTP helpers for the admin islands: JSON calls with retries, an XHR PUT with progress, byte formatting. */
 
 export class RequestFailed extends Error {
   constructor(
@@ -96,4 +96,14 @@ export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Private preview URL for the admin UI (no publish check, no watermark, never cached). */
+export function adminImageUrl(id: string, size: 480 | 768 | 1080 | 1600 | 2400 | 3200, version = 1): string {
+  return `/api/admin/img/${id}/${size}?v=${version}`;
+}
+
+/** window.confirm with a stable wording. */
+export function confirmDanger(message: string): boolean {
+  return typeof window !== 'undefined' && window.confirm(message);
 }

@@ -1,0 +1,22 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import SortableGrid from '../../../components/admin/SortableGrid';
+import { getAdminCategory, listCategoryPhotosAdmin } from '../../../lib/db';
+
+const id = Astro.params.id ?? '';
+const category = await getAdminCategory(id);
+if (!category) return new Response('Not found', { status: 404 });
+const photos = await listCategoryPhotosAdmin(id);
+---
+
+<Admin title={category.name} current="categories">
+  <div class="flex flex-col gap-1 pb-6">
+    <a href="/admin/categories" class="text-xs text-ink-muted hover:text-ink">← Categories</a>
+    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <h1 class="m-0 font-serif text-3xl font-normal text-ink">{category.name}</h1>
+      <span class="text-sm text-ink-muted">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
+      <a href={`/c/${category.slug}`} class="text-sm text-ink-muted hover:text-ink" target="_blank" rel="noreferrer">View on site →</a>
+    </div>
+  </div>
+  <SortableGrid client:load category={category} photos={photos} />
+</Admin>

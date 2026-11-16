@@ -51,6 +51,8 @@ export const patchPhotoSchema = z
     published: z.boolean(),
     watermark: z.boolean(),
     sortOrder: z.number(),
+    gpsLat: z.number().min(-90).max(90).nullable(),
+    gpsLng: z.number().min(-180).max(180).nullable(),
     ...exifFields,
   })
   .partial();

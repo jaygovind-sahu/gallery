@@ -1,0 +1,12 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import LocationManager from '../../components/admin/LocationManager';
+import { listLocations } from '../../lib/db';
+
+const locations = await listLocations();
+---
+
+<Admin title="Locations" current="locations">
+  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">Locations</h1>
+  <LocationManager client:load locations={locations} />
+</Admin>

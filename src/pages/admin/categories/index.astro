@@ -1,0 +1,12 @@
+---
+import Admin from '../../../layouts/Admin.astro';
+import CategoryManager from '../../../components/admin/CategoryManager';
+import { listAdminCategories } from '../../../lib/db';
+
+const categories = await listAdminCategories();
+---
+
+<Admin title="Categories" current="categories">
+  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">Categories</h1>
+  <CategoryManager client:load categories={categories} />
+</Admin>

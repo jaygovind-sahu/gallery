@@ -8,6 +8,12 @@ import path from 'node:path';
 const fixtures = (name: string) => path.join(import.meta.dirname, '..', 'fixtures', name);
 const FILES = ['landscape.jpg', 'portrait-rotated.jpg', 'gps.jpg', 'noexif.jpg', 'big.jpg'];
 
+/** Navigate and wait for the island to hydrate (its root gets `data-hydrated`). */
+async function open(page: Page, url: string): Promise<void> {
+  await page.goto(url);
+  await page.locator('[data-hydrated]').first().waitFor();
+}
+
 interface AdminPhoto {
   id: string;
   status: string;
@@ -52,7 +58,7 @@ test('uploads a batch with shared fields and stores EXIF and dimensions', async 
 
   const before = new Set((await listPhotos(page)).map((p) => p.id));
 
-  await page.goto('/admin/upload');
+  await open(page, '/admin/upload');
   await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible();
 
   // Shared fields: location, categories, visibility.
@@ -125,7 +131,7 @@ test('uploads a batch with shared fields and stores EXIF and dimensions', async 
 });
 
 test('rejects files over 100 MB and non-image types in the browser', async ({ page }) => {
-  await page.goto('/admin/upload');
+  await open(page, '/admin/upload');
   await page.locator('#upload-files').setInputFiles([
     { name: 'huge.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(0) },
     { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') },

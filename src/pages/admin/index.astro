@@ -1,12 +1,37 @@
 ---
-// Milestone 2 shell. Milestone 6 turns this into the photo library with filters and bulk actions.
 import Admin from '../../layouts/Admin.astro';
+import Library from '../../components/admin/Library';
+import { listAdminPhotos, listCategories, listLocations } from '../../lib/db';
 
-const email = Astro.locals.adminEmail;
+const q = Astro.url.searchParams;
+const statusParam = q.get('status');
+const filter = {
+  category: q.get('category') ?? '',
+  location: q.get('location') ?? '',
+  status: (statusParam === 'published' || statusParam === 'draft' || statusParam === 'uploading' ? statusParam : '') as
+    | ''
+    | 'published'
+    | 'draft'
+    | 'uploading',
+};
+
+const [photos, categories, locations] = await Promise.all([
+  listAdminPhotos({ categoryId: filter.category || undefined, locationId: filter.location || undefined, status: filter.status || undefined }),
+  listCategories(),
+  listLocations(),
+]);
 ---
 
 <Admin title="Library" current="library">
-  <h1 class="m-0 font-serif text-3xl font-normal text-ink">Library</h1>
-  <p class="mt-3 text-sm text-ink-muted">Signed in as {email ?? 'unknown'}.</p>
-  <p class="mt-8 text-sm text-ink-muted">No photos yet. <a href="/admin/upload" class="text-ink underline">Upload some</a>.</p>
+  <div class="flex items-baseline justify-between gap-4 pb-6">
+    <h1 class="m-0 font-serif text-3xl font-normal text-ink">Library</h1>
+    <a href="/admin/upload" class="text-sm text-ink-muted hover:text-ink">Upload →</a>
+  </div>
+  <Library
+    client:load
+    photos={photos}
+    categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+    locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+    filter={filter}
+  />
 </Admin>
