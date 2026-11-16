@@ -8,12 +8,11 @@
   // Private bucket for full-resolution originals. Never give it public access.
   "r2_buckets": [{ "binding": "ORIGINALS", "bucket_name": "gallery-originals" }],
 
-  // Replace database_id with the id printed by `pnpm wrangler d1 create gallery-db`.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "gallery-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "5d6ee36d-fd6a-4f9f-8204-a6519fd13947",
       "migrations_dir": "migrations"
     }
   ],
@@ -23,13 +22,42 @@
 
   // Creates the DNS record for the subdomain on deploy.
   "routes": [{ "pattern": "gallery.jaygovindsahu.com", "custom_domain": true }],
+  // Serve only on the custom domain, where Access sits in front of /admin: no workers.dev or preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
 
   // Public, non-secret settings. OWNER_EMAIL is a secret: `pnpm wrangler secret put OWNER_EMAIL`.
   "vars": {
     "SITE_URL": "https://gallery.jaygovindsahu.com",
-    "ACCESS_TEAM_DOMAIN": "<team>.cloudflareaccess.com",
-    "ACCESS_AUD": "<Access application AUD tag>"
+    "ACCESS_TEAM_DOMAIN": "blue-shadow-d31f.cloudflareaccess.com",
+    "ACCESS_AUD": "b97cb6cfa779e4f255dbb60f4e6724cc18e473bd0d52740fdf3ea9b205a69b8d"
   },
 
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+
+  "env": {
+    // Local dev against the live bucket and database: `pnpm dev:live` (CLOUDFLARE_ENV=live). Never deployed;
+    // no routes and no workers.dev URL so a stray `--env live` deploy can't claim the domain.
+    // Bindings and vars don't inherit into an env, so they're repeated here: keep them in sync with the top level.
+    "live": {
+      "routes": [],
+      "workers_dev": false,
+      "r2_buckets": [{ "binding": "ORIGINALS", "bucket_name": "gallery-originals", "remote": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gallery-db",
+          "database_id": "5d6ee36d-fd6a-4f9f-8204-a6519fd13947",
+          "migrations_dir": "migrations",
+          "remote": true
+        }
+      ],
+      "images": { "binding": "IMAGES" },
+      "vars": {
+        "SITE_URL": "https://gallery.jaygovindsahu.com",
+        "ACCESS_TEAM_DOMAIN": "blue-shadow-d31f.cloudflareaccess.com",
+        "ACCESS_AUD": "b97cb6cfa779e4f255dbb60f4e6724cc18e473bd0d52740fdf3ea9b205a69b8d"
+      }
+    }
+  }
 }

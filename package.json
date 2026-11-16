@@ -6,6 +6,7 @@
   "description": "Self-hosted photography gallery for gallery.jaygovindsahu.com on Cloudflare (Astro, D1, R2, Images).",
   "scripts": {
     "dev": "astro dev",
+    "dev:live": "CLOUDFLARE_ENV=live astro dev",
     "build": "astro build",
     "preview": "pnpm build && wrangler dev",
     "check": "astro check",

@@ -32,7 +32,9 @@ pnpm db:migrate:local              # creates the schema and seeds in a local D1
 pnpm dev                           # http://localhost:4321
 ```
 
-`astro dev` runs on Cloudflare's `workerd` runtime with local D1 and R2 stored under `.wrangler/`. Bindings are typed from `wrangler.jsonc`; after changing it, run `pnpm cf-typegen`.
+`astro dev` runs on Cloudflare's `workerd` runtime with local D1 and R2 stored under `.wrangler/`. Local D1 data is keyed by `database_id`, so if the id in `wrangler.jsonc` changes, run `pnpm db:migrate:local` again. Bindings are typed from `wrangler.jsonc`; after changing it, run `pnpm cf-typegen`.
+
+**Working on the live data from your machine:** `pnpm dev:live` runs the same dev server against the live D1 database and R2 bucket (the `live` environment in `wrangler.jsonc`, selected by `CLOUDFLARE_ENV=live`; needs `pnpm wrangler login`). Uploads, edits and deletes made at `http://localhost:4321/admin` land in the real gallery, exactly as if made on gallery.jaygovindsahu.com. The admin auth bypass from `.dev.vars` still applies on localhost. The Images binding stays local in this mode, so previews on localhost have no watermark; the live site renders its own derivatives from the same originals. Don't run `pnpm test:e2e` while `dev:live` is running: Playwright reuses an open dev server and its tests upload and delete photos.
 
 Other scripts:
 
@@ -41,7 +43,8 @@ Other scripts:
 | `pnpm build` | production build into `dist/` |
 | `pnpm test` | unit tests (Vitest) |
 | `pnpm fixtures` | generate the test JPEGs in `tests/fixtures/` (needs sharp) |
-| `pnpm test:e2e` | Playwright flows against the dev server (run `pnpm fixtures` once first) |
+| `pnpm dev:live` | dev server against the **live** D1 and R2 (needs `wrangler login`); uploads and edits change the real gallery |
+| `pnpm test:e2e` | Playwright flows against the dev server (run `pnpm fixtures` once first; never with `dev:live` running) |
 | `pnpm preview` | build, then run the built Worker locally with `wrangler dev` |
 | `pnpm watermark ["© Name"]` | regenerate `public/watermark.png` |
 | `pnpm db:migrate:remote` | apply migrations to the production D1 |
@@ -51,12 +54,12 @@ Other scripts:
 
 1. `pnpm wrangler login`
 2. `pnpm wrangler r2 bucket create gallery-originals` — keep public access **off**.
-3. `pnpm wrangler d1 create gallery-db`, then paste the printed `database_id` into `wrangler.jsonc`.
+3. `pnpm wrangler d1 create gallery-db`, then paste the printed `database_id` into `wrangler.jsonc` (top level and `env.live`). Done for this account: `gallery-db` is `5d6ee36d-…`.
 4. `pnpm db:migrate:remote`
 5. In the Cloudflare dashboard, open **Images** and confirm transformations / the Images binding are enabled.
 6. `pnpm wrangler secret put OWNER_EMAIL` — the only email allowed into the admin.
 7. `pnpm run deploy` — the `custom_domain` route creates the DNS record for `gallery.jaygovindsahu.com`.
-8. **Zero Trust → Access → Applications → Add (self-hosted)**: domain `gallery.jaygovindsahu.com`, paths `/admin*` and `/api/admin/*`, policy "Allow" for your email only. Copy the **AUD tag** and your team domain into `vars` in `wrangler.jsonc` and deploy again.
+8. **Zero Trust → Access → Applications → Add (self-hosted)**: domain `gallery.jaygovindsahu.com`, paths `/admin*` and `/api/admin/*`, policy "Allow" for your email only. Copy the **AUD tag** and your team domain (shown on the Access sign-in page's address, `<team>.cloudflareaccess.com`) into `vars` in `wrangler.jsonc`, top level and `env.live`, and deploy again. Done for this account: app `Gallery admin`, team `blue-shadow-d31f`.
 9. On jaygovindsahu.com, add a "Gallery" nav link to `https://gallery.jaygovindsahu.com`.
 
 ## Lightroom export settings
@@ -96,3 +99,5 @@ Other scripts:
 - Public HTML gets `Cache-Control: public, s-maxage=60, stale-while-revalidate=600` from the middleware when the page didn't set its own.
 - Category and location pages return a plain-text 404 for unknown slugs until milestone 7 adds the 404 page.
 - `vite.optimizeDeps.include` in `astro.config.mjs` lists every runtime dependency. The Cloudflare adapter forwards it to the workerd environments; without it Vite discovers server-side dependencies on first use, re-optimises mid-session, and the request that triggered it (and any in flight) fails with "The file does not exist at `.vite/deps_ssr/...`". Add new dependencies to that list.
+- Local dev against live data is opt-in through a wrangler environment (`env.live`, `pnpm dev:live`) rather than `"remote": true` on the top-level bindings plus the adapter's `remoteBindings` switch: that switch is all-or-nothing, so it would also have turned the e2e tests and the remote-Images watermark check loose on live data. Bindings don't inherit into an env, so `env.live` repeats them; it has no routes and no workers.dev URL so it can't be deployed over the real domain by accident. Images stays local in `dev:live` to save transformations.
+- `workers_dev` and `preview_urls` are set to `false` explicitly: the site is served only on gallery.jaygovindsahu.com, where Access covers the admin paths. (The Worker was first created as a placeholder from the dashboard, which enables workers.dev; the first deploy replaces it.)
