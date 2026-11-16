@@ -1,0 +1,16 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import UploadQueue from '../../components/admin/UploadQueue';
+import { listCategories, listLocations } from '../../lib/db';
+
+const [categories, locations] = await Promise.all([listCategories(), listLocations()]);
+---
+
+<Admin title="Upload" current="upload">
+  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">Upload</h1>
+  <UploadQueue
+    client:load
+    categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+    locations={locations.map((l) => ({ id: l.id, name: l.name, region: l.region }))}
+  />
+</Admin>

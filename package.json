@@ -15,7 +15,9 @@
     "watermark": "node scripts/make-watermark.mjs",
     "cf-typegen": "wrangler types",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "fixtures": "node tests/fixtures/make-fixtures.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.4.0",
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

@@ -10,8 +10,8 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | --- | --- |
 | 1. Scaffold (Astro + Cloudflare, D1 schema and seeds, watermark) | done |
 | 2. Auth + admin shell | done |
-| 3. Upload | next |
-| 4. Image route | — |
+| 3. Upload | done |
+| 4. Image route | next |
 | 5. Public gallery | — |
 | 6. Admin management | — |
 | 7. Polish + deploy | — |
@@ -40,6 +40,8 @@ Other scripts:
 | --- | --- |
 | `pnpm build` | production build into `dist/` |
 | `pnpm test` | unit tests (Vitest) |
+| `pnpm fixtures` | generate the test JPEGs in `tests/fixtures/` (needs sharp) |
+| `pnpm test:e2e` | Playwright flows against the dev server (run `pnpm fixtures` once first) |
 | `pnpm preview` | build, then run the built Worker locally with `wrangler dev` |
 | `pnpm watermark ["© Name"]` | regenerate `public/watermark.png` |
 | `pnpm db:migrate:remote` | apply migrations to the production D1 |
@@ -73,3 +75,7 @@ Other scripts:
 - Admin auth accepts the JWT from the `Cf-Access-Jwt-Assertion` header first and falls back to the `CF_Authorization` cookie (both are set by Access). `/api/admin/*` failures return the JSON error shape; `/admin*` failures return plain-text 403.
 - The middleware also sets `X-Content-Type-Options` and `Referrer-Policy` on every response now; the CSP arrives with milestone 7.
 - Unit tests run in plain Node (`vitest`), not the Workers pool: everything tested is pure logic.
+- Upload dimensions: the Images binding reports the stored pixel grid, the browser reports the display size after EXIF rotation. If both describe the same grid, the browser's orientation of the server's numbers is kept; otherwise the server's numbers win, swapped when the `X-Exif-Orientation` header (sent by the upload page) says the image is rotated.
+- The local Images binding (miniflare + sharp) reports a non-image with error 9523 and an "unsupported image format" message rather than production's 9412; both are treated as "not an image" (415). Any other inspection failure keeps the browser's values in local dev only and is a 502 in production.
+- XMP `dc:title` / IPTC ObjectName pre-fill the title and `dc:description` / IPTC Caption the caption, as Lightroom writes them.
+- Test images are generated, not committed: `tests/fixtures/make-fixtures.mjs` builds the five files from the milestone 3 checks (the 30 MB one is random noise).

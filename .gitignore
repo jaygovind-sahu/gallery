@@ -27,3 +27,6 @@ pnpm-debug.log*
 # tests
 test-results/
 playwright-report/
+
+# generated test images (tests/fixtures/make-fixtures.mjs)
+tests/fixtures/*.jpg

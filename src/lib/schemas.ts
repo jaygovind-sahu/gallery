@@ -5,7 +5,7 @@ import { UPLOAD_MIME_TYPES } from './images';
 const ulid = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'Expected a ULID');
 const text = (max: number) => z.string().trim().max(max);
 const nullableText = (max: number) => text(max).nullable();
-const optionalNumber = z.number().finite().nullable().optional();
+const optionalNumber = z.number().nullable().optional();
 const isoLocal = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/, 'Expected YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]')
@@ -50,7 +50,7 @@ export const patchPhotoSchema = z
     categoryIds: z.array(ulid).max(50),
     published: z.boolean(),
     watermark: z.boolean(),
-    sortOrder: z.number().finite(),
+    sortOrder: z.number(),
     ...exifFields,
   })
   .partial();
@@ -86,7 +86,7 @@ export const patchCategorySchema = z
     description: nullableText(200),
     defaultLayout: layout,
     coverPhotoId: ulid.nullable(),
-    position: z.number().finite(),
+    position: z.number(),
   })
   .partial();
 export const reorderCategoriesSchema = z.object({ ids: z.array(ulid).min(1).max(100) });

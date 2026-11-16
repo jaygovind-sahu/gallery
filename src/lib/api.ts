@@ -46,7 +46,7 @@ export async function parseJson<T>(request: Request, schema: ZodType<T>): Promis
 }
 
 /** Wrap a handler so thrown ApiErrors become JSON responses and anything else a 500. */
-export function handle(fn: () => Promise<Response>): Promise<Response> {
+export async function handle(fn: () => Promise<Response>): Promise<Response> {
   return fn().catch((err: unknown) => {
     if (err instanceof ApiError) return errorResponse(err.status, err.code, err.message);
     console.error(err);
