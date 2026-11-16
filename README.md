@@ -9,8 +9,8 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | Milestone | State |
 | --- | --- |
 | 1. Scaffold (Astro + Cloudflare, D1 schema and seeds, watermark) | done |
-| 2. Auth + admin shell | next |
-| 3. Upload | — |
+| 2. Auth + admin shell | done |
+| 3. Upload | next |
 | 4. Image route | — |
 | 5. Public gallery | — |
 | 6. Admin management | — |
@@ -39,6 +39,7 @@ Other scripts:
 | Script | Does |
 | --- | --- |
 | `pnpm build` | production build into `dist/` |
+| `pnpm test` | unit tests (Vitest) |
 | `pnpm preview` | build, then run the built Worker locally with `wrangler dev` |
 | `pnpm watermark ["© Name"]` | regenerate `public/watermark.png` |
 | `pnpm db:migrate:remote` | apply migrations to the production D1 |
@@ -63,8 +64,12 @@ Other scripts:
 - **Metadata:** **All Metadata** — otherwise EXIF, titles and captions are stripped and nothing pre-fills on upload. Location info can stay on; the site never publishes GPS.
 - **Output sharpening:** Screen, Standard (optional)
 
-## Decisions made while scaffolding
+## Decisions
 
 - `imageService: 'passthrough'` in the Astro adapter: photos are resized by our own `/img` route via the Images binding, not by `astro:assets`.
 - `OWNER_EMAIL` is a Worker secret rather than a plain var, so it isn't committed.
 - The watermark PNG is rendered from SVG text with sharp; the system font is used if Instrument Sans isn't installed where the script runs.
+- Package builds for esbuild, sharp and workerd are allowed in `pnpm-workspace.yaml` (`allowBuilds`), which is where pnpm 12 wants them.
+- Admin auth accepts the JWT from the `Cf-Access-Jwt-Assertion` header first and falls back to the `CF_Authorization` cookie (both are set by Access). `/api/admin/*` failures return the JSON error shape; `/admin*` failures return plain-text 403.
+- The middleware also sets `X-Content-Type-Options` and `Referrer-Policy` on every response now; the CSP arrives with milestone 7.
+- Unit tests run in plain Node (`vitest`), not the Workers pool: everything tested is pure logic.

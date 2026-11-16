@@ -1,0 +1,58 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  /** Pathname prefix of the current section, for aria-current. */
+  current?: 'library' | 'upload' | 'categories' | 'locations';
+}
+
+const { title, current } = Astro.props;
+
+const nav = [
+  { key: 'library', href: '/admin', label: 'Library' },
+  { key: 'upload', href: '/admin/upload', label: 'Upload' },
+  { key: 'categories', href: '/admin/categories', label: 'Categories' },
+  { key: 'locations', href: '/admin/locations', label: 'Locations' },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0f0f10" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} — Admin</title>
+  </head>
+  <body class="min-h-screen">
+    <header class="sticky top-0 z-10 border-b border-divider bg-bg">
+      <div class="flex items-center justify-between gap-4 px-4 py-3 sm:px-8">
+        <a href="/admin" class="font-serif text-[20px] text-ink">Gallery <span class="text-ink-muted">admin</span></a>
+        <a href="/" class="text-xs text-ink-muted hover:text-ink">View site →</a>
+      </div>
+      <nav aria-label="Admin" class="flex gap-5 overflow-x-auto px-4 pb-3 text-sm sm:px-8">
+        {
+          nav.map((item) => (
+            <a
+              href={item.href}
+              aria-current={item.key === current ? 'page' : undefined}
+              class:list={[
+                'whitespace-nowrap border-b pb-1 transition-colors hover:text-ink',
+                item.key === current ? 'border-ink text-ink' : 'border-transparent text-ink-muted',
+              ]}
+            >
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+    </header>
+
+    <main class="px-4 pb-16 pt-6 sm:px-8">
+      <slot />
+    </main>
+  </body>
+</html>

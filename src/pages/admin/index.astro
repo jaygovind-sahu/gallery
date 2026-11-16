@@ -1,0 +1,12 @@
+---
+// Milestone 2 shell. Milestone 6 turns this into the photo library with filters and bulk actions.
+import Admin from '../../layouts/Admin.astro';
+
+const email = Astro.locals.adminEmail;
+---
+
+<Admin title="Library" current="library">
+  <h1 class="m-0 font-serif text-3xl font-normal text-ink">Library</h1>
+  <p class="mt-3 text-sm text-ink-muted">Signed in as {email ?? 'unknown'}.</p>
+  <p class="mt-8 text-sm text-ink-muted">No photos yet. <a href="/admin/upload" class="text-ink underline">Upload some</a>.</p>
+</Admin>
