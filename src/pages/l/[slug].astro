@@ -1,0 +1,24 @@
+---
+// Every published photo at a location, newest first.
+import GalleryPage from '../../components/gallery/GalleryPage.astro';
+import { getPublicLocationBySlug, getSetting, listCategories, listLocationPhotos } from '../../lib/db';
+import { isLayout } from '../../lib/gallery';
+
+const slug = Astro.params.slug ?? '';
+const [location, categories, defaultSetting] = await Promise.all([getPublicLocationBySlug(slug), listCategories(), getSetting('default_layout')]);
+if (!location) return new Response('Not found', { status: 404 });
+
+const photos = await listLocationPhotos(location.id);
+const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
+const countLabel = `${location.photoCount} ${location.photoCount === 1 ? 'photo' : 'photos'}`;
+---
+
+<GalleryPage
+  title={`${location.name} — Jaygovind Sahu`}
+  categories={categories}
+  heading={location.name}
+  subline={`${countLabel}${location.region ? ` · ${location.region}` : ''}`}
+  photos={photos}
+  defaultLayout={defaultLayout}
+  galleryUrl={`/l/${location.slug}`}
+/>

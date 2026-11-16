@@ -1,0 +1,48 @@
+---
+// Photo permalink: the lightbox opens over the photo's first category (or /all), with Open Graph tags
+// so shared links preview well. Drafts and unknown ids are 404s.
+import { env } from 'cloudflare:workers';
+import GalleryPage from '../../components/gallery/GalleryPage.astro';
+import { getCategoryBySlug, getPublicPhoto, getSetting, listAllPhotos, listCategories, listCategoryPhotos } from '../../lib/db';
+import { derivativeDimensions, isLayout } from '../../lib/gallery';
+import { imageUrl } from '../../lib/images';
+
+const id = Astro.params.id ?? '';
+const photo = /^[0-9A-HJKMNP-TV-Z]{26}$/.test(id) ? await getPublicPhoto(id) : null;
+if (!photo) return new Response('Not found', { status: 404 });
+
+const [categories, defaultSetting] = await Promise.all([listCategories(), getSetting('default_layout')]);
+const first = photo.categories[0] ?? null;
+const category = first ? await getCategoryBySlug(first.slug) : null;
+const photos = category ? await listCategoryPhotos(category.id) : await listAllPhotos();
+const defaultLayout = category ? category.defaultLayout : isLayout(defaultSetting) ? defaultSetting : 'rows';
+const galleryUrl = category ? `/c/${category.slug}` : '/all';
+
+const title = photo.title?.trim() || 'Photo';
+const og = derivativeDimensions(photo.width, photo.height, 1600);
+const site = (() => {
+  try {
+    return new URL(env.SITE_URL).origin;
+  } catch {
+    return Astro.url.origin;
+  }
+})();
+---
+
+<GalleryPage
+  title={`${title} — Jaygovind Sahu`}
+  description={photo.caption ?? undefined}
+  categories={categories}
+  activeSlug={category?.slug}
+  heading={category?.name ?? 'All photos'}
+  headingTag="h2"
+  photos={photos}
+  defaultLayout={defaultLayout}
+  galleryUrl={galleryUrl}
+  initialPhotoId={photo.id}
+  contextCategory={category?.name ?? null}
+  ogImage={{ url: `${site}${imageUrl(photo.id, photo.version, 1600)}`, width: og.width, height: og.height }}
+>
+  <h1 class="sr-only">{title}</h1>
+  {photo.caption && <p class="sr-only">{photo.caption}</p>}
+</GalleryPage>

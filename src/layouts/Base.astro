@@ -6,40 +6,86 @@ interface Props {
   title: string;
   description?: string;
   categories: Category[];
-  /** Slug of the current category, for aria-current in the menu. */
+  /** Slug of the current category (or "all"), for aria-current in the menu. */
   activeSlug?: string;
+  ogImage?: { url: string; width: number; height: number } | null;
 }
 
-const { title, description = 'Photography by Jaygovind Sahu: birds, macro, landscape and astro.', categories, activeSlug } = Astro.props;
+const {
+  title,
+  description = 'Photography by Jaygovind Sahu: birds, macro, landscape and astro.',
+  categories,
+  activeSlug,
+  ogImage = null,
+} = Astro.props;
+
+const links = [...categories.map((c) => ({ href: `/c/${c.slug}`, label: c.name, slug: c.slug })), { href: '/all', label: 'All', slug: 'all' }];
+const hasHeaderEnd = Astro.slots.has('header-end');
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0f0f10" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={Astro.url.origin + Astro.url.pathname} />
+    {
+      ogImage && (
+        <>
+          <meta property="og:image" content={ogImage.url} />
+          <meta property="og:image:width" content={String(ogImage.width)} />
+          <meta property="og:image:height" content={String(ogImage.height)} />
+          <meta name="twitter:card" content="summary_large_image" />
+        </>
+      )
+    }
   </head>
   <body class="min-h-screen">
-    <header class="sticky top-0 z-10 flex items-center justify-between gap-6 bg-bg px-4 py-4 sm:px-8 sm:py-5">
-      <a href="/" class="font-serif text-[22px] tracking-[0.01em] text-ink">Jaygovind Sahu</a>
-      <nav aria-label="Categories" class="hidden gap-6 text-sm sm:flex">
-        {
-          categories.map((c) => (
-            <a
-              href={`/c/${c.slug}`}
-              aria-current={c.slug === activeSlug ? 'page' : undefined}
-              class:list={['transition-colors hover:text-ink', c.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
-            >
-              {c.name}
-            </a>
-          ))
-        }
-        <a href="/all" class="text-ink-muted transition-colors hover:text-ink">All</a>
-      </nav>
+    <header id="site-header" class="sticky top-0 z-10 flex items-center justify-between gap-4 bg-bg px-4 py-4 transition-transform duration-200 sm:px-8 sm:py-5">
+      <a href="/" class="shrink-0 font-serif text-[22px] tracking-[0.01em] text-ink">Jaygovind Sahu</a>
+      <div class="flex items-center gap-3 sm:gap-6">
+        <nav aria-label="Categories" class="hidden gap-6 text-sm sm:flex">
+          {
+            links.map((l) => (
+              <a
+                href={l.href}
+                aria-current={l.slug === activeSlug ? 'page' : undefined}
+                class:list={['transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
+              >
+                {l.label}
+              </a>
+            ))
+          }
+        </nav>
+        {hasHeaderEnd && <slot name="header-end" />}
+        <details class="relative sm:hidden">
+          <summary class="flex cursor-pointer list-none items-center rounded p-1.5 text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </summary>
+          <nav aria-label="Categories" class="absolute right-0 top-full mt-2 flex min-w-40 flex-col border border-divider bg-bg py-2 text-sm">
+            {
+              links.map((l) => (
+                <a
+                  href={l.href}
+                  aria-current={l.slug === activeSlug ? 'page' : undefined}
+                  class:list={['px-4 py-2 transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
+                >
+                  {l.label}
+                </a>
+              ))
+            }
+          </nav>
+        </details>
+      </div>
     </header>
 
     <main class="px-4 sm:px-8">
@@ -50,5 +96,28 @@ const { title, description = 'Photography by Jaygovind Sahu: birds, macro, lands
       <span>© Jaygovind Sahu</span>
       <a href="https://jaygovindsahu.com" class="hover:text-ink">jaygovindsahu.com</a>
     </footer>
+
+    <script>
+      // Slim sticky header: hides on scroll down, returns on scroll up.
+      const header = document.getElementById('site-header');
+      let last = window.scrollY;
+      let ticking = false;
+      window.addEventListener(
+        'scroll',
+        () => {
+          if (ticking || !header) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            const y = window.scrollY;
+            const menuOpen = header.querySelector('details[open]');
+            if (y > last && y > 80 && !menuOpen) header.classList.add('-translate-y-full');
+            else if (y < last) header.classList.remove('-translate-y-full');
+            last = y;
+            ticking = false;
+          });
+        },
+        { passive: true },
+      );
+    </script>
   </body>
 </html>

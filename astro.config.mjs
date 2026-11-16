@@ -16,5 +16,29 @@ export default defineConfig({
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()],
+    // Pre-bundle every dependency the server renders with. The Cloudflare adapter forwards this list to the
+    // workerd environments; without it Vite discovers them on first use, re-optimises mid-session and the
+    // request that triggered it fails with "The file does not exist at .vite/deps_ssr/...".
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'zod',
+        'jose',
+        'ulid',
+        'thumbhash',
+        'exifr',
+        'react-photo-album',
+        'react-photo-album/ssr',
+        'yet-another-react-lightbox',
+        'yet-another-react-lightbox/plugins/zoom',
+        'yet-another-react-lightbox/plugins/fullscreen',
+        '@dnd-kit/core',
+        '@dnd-kit/sortable',
+        '@dnd-kit/utilities',
+      ],
+    },
   },
 });

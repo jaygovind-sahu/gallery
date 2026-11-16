@@ -65,6 +65,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (admin) {
     headers.set('cache-control', 'no-store');
     headers.set('x-robots-tag', 'noindex');
+  } else if (
+    context.request.method === 'GET' &&
+    response.status === 200 &&
+    !headers.has('cache-control') &&
+    (headers.get('content-type') ?? '').startsWith('text/html')
+  ) {
+    // Public pages: edge-cached for a minute so admin changes show within about that long.
+    headers.set('cache-control', 'public, s-maxage=60, stale-while-revalidate=600');
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 });

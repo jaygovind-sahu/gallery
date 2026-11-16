@@ -12,9 +12,9 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | 2. Auth + admin shell | done |
 | 3. Upload | done |
 | 4. Image route | done |
-| 5. Public gallery | next |
+| 5. Public gallery | done (Lighthouse and the real-phone / Safari checks are still to run by hand) |
 | 6. Admin management | done |
-| 7. Polish + deploy | — |
+| 7. Polish + deploy | next |
 
 ## Stack
 
@@ -88,3 +88,11 @@ Other scripts:
 - The watermark PNG is read through the `ASSETS` binding (the adapter's static-asset binding, also present in `astro dev`) and kept in memory per isolate; a plain `fetch` of `/watermark.png` is the fallback if the binding is missing.
 - The local Images binding (miniflare + sharp) only applies rotate, resize and the output format: it ignores `draw()` and `quality`, so derivatives in `astro dev` carry no watermark. To check the watermark locally, set `"images": { "binding": "IMAGES", "remote": true }` in `wrangler.jsonc` (needs `wrangler login`; D1 and R2 stay local) and run `REMOTE_IMAGES=1 pnpm test:e2e tests/e2e/images.spec.ts`. The metadata check passes locally because sharp strips EXIF, XMP and IPTC on output, as the production service does.
 - When Cloudflare Images reports 9422 (monthly transformations used up) the route logs it and answers 503 with `Retry-After: 3600`, never the original. Any other transform failure is a 503 in production and, in local dev only, the original bytes with `no-store`.
+- Home page shows the 48 most recent uploads (`created_at DESC`); the "featured set" question in the spec stays open.
+- Rows and masonry come from `react-photo-album` wrapped in its `SSR` component with breakpoints 640 / 1024 / 1440: the server renders the layout for each width band and container queries show the matching one, so there is no layout shift before hydration. Captions are rendered with `render.extras` inside each tile at a fixed 44 px, which keeps rows aligned without changing the library's height maths. The uniform grid is a plain CSS grid (2 / 3 / 4 columns, 3:2 tiles, `object-fit: cover`).
+- Tile images are `loading="lazy"` with `fetchpriority="high"` on the first four in the server HTML, and switch to `loading="eager"` after hydration. Eager images inside the hidden SSR width bands would otherwise be fetched too, since `display: none` doesn't stop `<img>` loads; lazy ones only load once they have a position in the viewport.
+- The layout toggle and the gallery are two islands (the toggle lives in the header, which is server-rendered). The toggle owns `?layout=` and localStorage and broadcasts a `gallery:layout` event; the gallery also resolves the stored choice itself on mount so order of hydration doesn't matter.
+- The lightbox is `yet-another-react-lightbox` with Zoom and Fullscreen; the info panel is our own component rendered through `render.controls` (the Captions plugin can't render a location link or category chips). `i` toggles it. Opening pushes `/p/:id`, slide changes `replaceState`, closing goes back when the island pushed the entry and otherwise (direct permalink load) replaces the URL with the gallery page. Opening the lightbox from a permalink uses the photo's first category by category position, else `/all`.
+- Public HTML gets `Cache-Control: public, s-maxage=60, stale-while-revalidate=600` from the middleware when the page didn't set its own.
+- Category and location pages return a plain-text 404 for unknown slugs until milestone 7 adds the 404 page.
+- `vite.optimizeDeps.include` in `astro.config.mjs` lists every runtime dependency. The Cloudflare adapter forwards it to the workerd environments; without it Vite discovers server-side dependencies on first use, re-optimises mid-session, and the request that triggered it (and any in flight) fails with "The file does not exist at `.vite/deps_ssr/...`". Add new dependencies to that list.

@@ -1,0 +1,53 @@
+---
+/**
+ * Shared shell for every public gallery page: Base layout with the layout toggle in the header,
+ * an optional title block, then the Gallery island.
+ */
+import Base from '../../layouts/Base.astro';
+import type { Category, PublicPhoto } from '../../lib/db';
+import { resolveLayout, type Layout } from '../../lib/gallery';
+import Gallery from './Gallery';
+import LayoutToggle from './LayoutToggle';
+
+interface Props {
+  title: string;
+  description?: string;
+  categories: Category[];
+  activeSlug?: string;
+  heading?: string;
+  /** Permalink pages put the photo title in the h1 and show the category name as an h2. */
+  headingTag?: 'h1' | 'h2';
+  subline?: string | null;
+  photos: PublicPhoto[];
+  defaultLayout: Layout;
+  galleryUrl: string;
+  initialPhotoId?: string | null;
+  contextCategory?: string | null;
+  ogImage?: { url: string; width: number; height: number } | null;
+}
+
+const { title, description, categories, activeSlug, heading, headingTag = 'h1', subline, photos, defaultLayout, galleryUrl, initialPhotoId = null, contextCategory = null, ogImage = null } = Astro.props;
+const initialLayout = resolveLayout(Astro.url.searchParams.get('layout'), null, defaultLayout);
+---
+
+<Base title={title} description={description} categories={categories} activeSlug={activeSlug} ogImage={ogImage}>
+  <LayoutToggle slot="header-end" client:load fallback={defaultLayout} initial={initialLayout} />
+  {
+    heading ? (
+      <div class="flex flex-col gap-2.5 pb-9 pt-12">
+        {
+          headingTag === 'h1' ? (
+            <h1 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">{heading}</h1>
+          ) : (
+            <h2 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">{heading}</h2>
+          )
+        }
+        {subline && <p class="m-0 text-sm text-ink-muted">{subline}</p>}
+      </div>
+    ) : (
+      <div class="pt-6" />
+    )
+  }
+  <slot />
+  <Gallery client:load photos={photos} initialLayout={initialLayout} defaultLayout={defaultLayout} galleryUrl={galleryUrl} initialPhotoId={initialPhotoId} contextCategory={contextCategory} />
+</Base>

@@ -76,6 +76,162 @@ export async function getSetting(key: string): Promise<string | null> {
   return row?.value ?? null;
 }
 
+// ───────────────────────── Photos (public) ─────────────────────────
+
+/**
+ * What public pages and islands get. No GPS, no R2 key, no status/published flags: a PublicPhoto only
+ * exists for rows that are ready and published.
+ */
+export interface PublicPhoto {
+  id: string;
+  version: number;
+  width: number;
+  height: number;
+  placeholder: string | null;
+  title: string | null;
+  caption: string | null;
+  takenAt: string | null;
+  location: { slug: string; name: string } | null;
+  categories: { slug: string; name: string }[];
+  camera: string | null;
+  lens: string | null;
+  focalLengthMm: number | null;
+  aperture: number | null;
+  shutterS: number | null;
+  iso: number | null;
+  exposureComp: number | null;
+}
+
+interface PublicPhotoRow {
+  id: string;
+  version: number;
+  width: number;
+  height: number;
+  placeholder: string | null;
+  title: string | null;
+  caption: string | null;
+  taken_at: string | null;
+  location_slug: string | null;
+  location_name: string | null;
+  categories: string | null;
+  camera: string | null;
+  lens: string | null;
+  focal_length_mm: number | null;
+  aperture: number | null;
+  shutter_s: number | null;
+  iso: number | null;
+  exposure_comp: number | null;
+}
+
+const PUBLIC_WHERE = "p.status = 'ready' AND p.published = 1";
+
+/** Columns are listed explicitly so a new private column can never leak by accident. */
+const PUBLIC_PHOTO_SELECT = `
+  SELECT p.id, p.version, p.width, p.height, p.placeholder, p.title, p.caption, p.taken_at,
+         l.slug AS location_slug, l.name AS location_name,
+         (SELECT group_concat(x.slug || char(31) || x.name, char(30))
+            FROM (SELECT c.slug, c.name FROM photo_categories pc JOIN categories c ON c.id = pc.category_id
+                   WHERE pc.photo_id = p.id ORDER BY c.position) x) AS categories,
+         p.camera, p.lens, p.focal_length_mm, p.aperture, p.shutter_s, p.iso, p.exposure_comp
+    FROM photos p
+    LEFT JOIN locations l ON l.id = p.location_id`;
+
+function toPublicPhoto(r: PublicPhotoRow): PublicPhoto {
+  return {
+    id: r.id,
+    version: r.version,
+    width: r.width,
+    height: r.height,
+    placeholder: r.placeholder,
+    title: r.title,
+    caption: r.caption,
+    takenAt: r.taken_at,
+    location: r.location_slug && r.location_name ? { slug: r.location_slug, name: r.location_name } : null,
+    categories: r.categories
+      ? r.categories.split('\x1e').map((pair) => {
+          const [slug = '', name = ''] = pair.split('\x1f');
+          return { slug, name };
+        })
+      : [],
+    camera: r.camera,
+    lens: r.lens,
+    focalLengthMm: r.focal_length_mm,
+    aperture: r.aperture,
+    shutterS: r.shutter_s,
+    iso: r.iso,
+    exposureComp: r.exposure_comp,
+  };
+}
+
+/** Home page: the most recent uploads. */
+export async function listLatestPhotos(limit: number): Promise<PublicPhoto[]> {
+  const { results } = await db()
+    .prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} ORDER BY p.created_at DESC, p.id DESC LIMIT ?`)
+    .bind(limit)
+    .all<PublicPhotoRow>();
+  return results.map(toPublicPhoto);
+}
+
+/** One category in its manual order. */
+export async function listCategoryPhotos(categoryId: string): Promise<PublicPhoto[]> {
+  const { results } = await db()
+    .prepare(
+      `${PUBLIC_PHOTO_SELECT}
+        JOIN photo_categories m ON m.photo_id = p.id AND m.category_id = ?
+       WHERE ${PUBLIC_WHERE} ORDER BY m.position, p.id`,
+    )
+    .bind(categoryId)
+    .all<PublicPhotoRow>();
+  return results.map(toPublicPhoto);
+}
+
+/** Every published photo, by sort_order. */
+export async function listAllPhotos(): Promise<PublicPhoto[]> {
+  const { results } = await db()
+    .prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} ORDER BY p.sort_order, p.id`)
+    .all<PublicPhotoRow>();
+  return results.map(toPublicPhoto);
+}
+
+/** Every published photo at a location, newest first (by date taken, then upload). */
+export async function listLocationPhotos(locationId: string): Promise<PublicPhoto[]> {
+  const { results } = await db()
+    .prepare(
+      `${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} AND p.location_id = ?
+       ORDER BY p.taken_at IS NULL, p.taken_at DESC, p.created_at DESC, p.id DESC`,
+    )
+    .bind(locationId)
+    .all<PublicPhotoRow>();
+  return results.map(toPublicPhoto);
+}
+
+/** One published photo, for its permalink. Null for drafts and unknown ids alike. */
+export async function getPublicPhoto(id: string): Promise<PublicPhoto | null> {
+  const row = await db().prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} AND p.id = ?`).bind(id).first<PublicPhotoRow>();
+  return row ? toPublicPhoto(row) : null;
+}
+
+export interface PublicLocation {
+  id: string;
+  slug: string;
+  name: string;
+  region: string | null;
+  /** Published, ready photos at this location. */
+  photoCount: number;
+}
+
+export async function getPublicLocationBySlug(slug: string): Promise<PublicLocation | null> {
+  const row = await db()
+    .prepare(
+      `SELECT l.id, l.slug, l.name, l.region,
+              (SELECT COUNT(*) FROM photos p WHERE p.location_id = l.id AND ${PUBLIC_WHERE}) AS photo_count
+         FROM locations l WHERE l.slug = ?`,
+    )
+    .bind(slug)
+    .first<{ id: string; slug: string; name: string; region: string | null; photo_count: number }>();
+  return row ? { id: row.id, slug: row.slug, name: row.name, region: row.region, photoCount: row.photo_count } : null;
+}
+
 // ───────────────────────── Photos (image route) ─────────────────────────
 
 export type PhotoStatus = 'uploading' | 'ready';

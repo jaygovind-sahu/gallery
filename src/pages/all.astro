@@ -1,14 +1,21 @@
 ---
-// Milestone 1 placeholder. Milestone 5 lists every published photo by sort_order.
-import Base from '../layouts/Base.astro';
-import { listCategories } from '../lib/db';
+// Every published photo, by sort_order.
+import GalleryPage from '../components/gallery/GalleryPage.astro';
+import { getSetting, listAllPhotos, listCategories } from '../lib/db';
+import { isLayout } from '../lib/gallery';
 
-const categories = await listCategories();
+const [categories, defaultSetting, photos] = await Promise.all([listCategories(), getSetting('default_layout'), listAllPhotos()]);
+const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
+const count = `${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}`;
 ---
 
-<Base title="All photos — Jaygovind Sahu" categories={categories}>
-  <div class="flex flex-col gap-2.5 pb-9 pt-12">
-    <h1 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">All photos</h1>
-  </div>
-  <p class="pb-16 text-sm text-ink-muted">No photos yet.</p>
-</Base>
+<GalleryPage
+  title="All photos — Jaygovind Sahu"
+  categories={categories}
+  activeSlug="all"
+  heading="All photos"
+  subline={count}
+  photos={photos}
+  defaultLayout={defaultLayout}
+  galleryUrl="/all"
+/>
