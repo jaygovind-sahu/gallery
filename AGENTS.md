@@ -29,7 +29,7 @@ Self-hosted photography gallery for gallery.jaygovindsahu.com on Cloudflare (Ast
 - When the spec leaves a choice open, take the simplest option that meets the requirement and record it under "Decisions" in README.md. If the spec looks wrong or contradicts itself, stop and ask the owner rather than guessing.
 - `pnpm build` must pass before every commit. Run `pnpm test` and the e2e specs for what you touched.
 - If a change makes a wiki page wrong, fix the page in the same commit.
-- Deploys, remote migrations, and anything run against `pnpm dev:live` change the live gallery. Ask the owner first.
+- Deploys, remote migrations, and anything run against `pnpm dev:live` change the live gallery. Ask the owner first. **Pushing or merging to `main` is a deploy**: GitHub Actions applies any new migration and deploys ([deploy.md](wiki/deploy.md)).
 
 ## Rules that must not break
 

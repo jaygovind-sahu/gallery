@@ -45,7 +45,7 @@ The only requests the Worker makes outside Cloudflare are to the Anthropic and O
 
 - A photo is sent only when the owner clicks Suggest for it. There is no automatic or bulk sending.
 - What goes out: a downscaled JPEG made in the browser, the location's name and region, the month and year, category names, gear, keywords and the owner's notes. GPS coordinates, the exact time and the original never leave.
-- The API keys are Worker secrets. The browser never talks to a provider, so the self-only CSP is unaffected.
+- The API keys are Worker secrets, managed in GitHub and sent with each deploy ([deploy.md](deploy.md#secrets)). The browser never talks to a provider, so the self-only CSP is unaffected.
 - `AI_MOCK=1` works only off the production hostname, like the dev bypass. Never set it as a production var.
 
 ## Input validation

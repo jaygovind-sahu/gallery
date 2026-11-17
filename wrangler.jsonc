@@ -26,13 +26,13 @@
   "workers_dev": false,
   "preview_urls": false,
 
-  // Public, non-secret settings. OWNER_EMAIL is a secret: `pnpm wrangler secret put OWNER_EMAIL`.
+  // Public, non-secret settings. OWNER_EMAIL is a secret, kept in GitHub and sent with each deploy (wiki/deploy.md).
   "vars": {
     "SITE_URL": "https://gallery.jaygovindsahu.com",
     "ACCESS_TEAM_DOMAIN": "blue-shadow-d31f.cloudflareaccess.com",
     "ACCESS_AUD": "b97cb6cfa779e4f255dbb60f4e6724cc18e473bd0d52740fdf3ea9b205a69b8d",
-    // AI suggestions: which model each provider runs. The API keys are secrets:
-    // `pnpm wrangler secret put ANTHROPIC_API_KEY` and `pnpm wrangler secret put OPENAI_API_KEY`.
+    // AI suggestions: which model each provider runs. The API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY) are
+    // secrets, kept in GitHub like OWNER_EMAIL.
     "ANTHROPIC_MODEL": "claude-haiku-5-5",
     "OPENAI_MODEL": "gpt-5-mini",
     "OPENAI_REASONING_EFFORT": "low"

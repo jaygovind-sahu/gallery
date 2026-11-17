@@ -1,0 +1,67 @@
+# Deploys the gallery to Cloudflare on every push to main, or by hand from the Actions tab.
+# One-time setup (API token, secrets, the production environment) is in wiki/deploy.md.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time. A newer push waits for the running one instead of cancelling it mid-migration.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Secrets can live on this environment, restricted to main, so no other branch's workflow can read them.
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.21.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # Applies only migrations production hasn't seen; a no-op otherwise. Runs before the deploy so new code
+      # never goes out ahead of the columns it needs.
+      - name: Apply D1 migrations
+        run: pnpm db:migrate:remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Worker secrets that are set in GitHub go up with the new version. A secret not set in GitHub is left as
+      # it is on the Worker (--secrets-file is additive), so keys added with `wrangler secret put` keep working.
+      - name: Deploy Worker
+        run: |
+          secrets_file="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets_file"' EXIT
+          jq -n 'env | {OWNER_EMAIL, ANTHROPIC_API_KEY, OPENAI_API_KEY}
+                     | with_entries(select(.value != null and .value != ""))' > "$secrets_file"
+          echo "Worker secrets sent with this deploy: $(jq -r 'keys | if length == 0 then "none" else join(", ") end' "$secrets_file")"
+          pnpm wrangler deploy --secrets-file "$secrets_file"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
