@@ -71,6 +71,7 @@ interface Guess {
   scientificName: string | null;
   confidence: Suggestion['subject']['confidence'];
   alternatives: string[];
+  fieldMarks: string | null;
 }
 
 export default function TextFields({ value, onChange, disabled = false, aiEnabled, getImage, getContext, categories, categoryIds, onAddCategory, compact = false, name }: Props) {
@@ -115,7 +116,7 @@ export default function TextFields({ value, onChange, disabled = false, aiEnable
     setTitleOptions(s.titles);
     setPending(merged.pending);
     setPendingHashtags(cur.hashtags.trim() && tags && normalizeHashtags(cur.hashtags) !== tags ? tags : null);
-    setGuess(!hadSubject && s.subject.name && s.subject.confidence !== 'given' ? { name: s.subject.name, scientificName: s.subject.scientificName, confidence: s.subject.confidence, alternatives: s.subject.alternatives } : null);
+    setGuess(!hadSubject && s.subject.name && s.subject.confidence !== 'given' ? { ...s.subject, name: s.subject.name } : null);
     setSuggestedCategories(s.categoryIds);
     setMessage('Suggestions added. Review and edit them before saving.');
   };
@@ -140,6 +141,13 @@ export default function TextFields({ value, onChange, disabled = false, aiEnable
     } finally {
       setWorking(false);
     }
+  };
+
+  /** One of the AI's alternatives, chosen by the owner: it becomes their subject, no longer a guess. */
+  const pickAlternative = (name: string) => {
+    setGuess(null);
+    set({ subject: name });
+    setMessage(`Subject set to ${name}. Suggest again to rewrite the words around it.`);
   };
 
   const choose = (index: number) => {
@@ -221,12 +229,27 @@ export default function TextFields({ value, onChange, disabled = false, aiEnable
           )}
         </div>
         {aiEnabled && !guess && !compact && (
-          <p className="text-xs text-ink-muted">Name the bird, animal or insect if you know it; the AI writes around what you give it.</p>
+          <p className="text-xs text-ink-muted">Name the bird, animal, insect or plant if you know it; the AI writes around what you give it.</p>
         )}
         {guess && (
           <p className="text-xs text-ink" role="note">
             AI guess, {guess.confidence} confidence{guess.scientificName ? ` (${guess.scientificName})` : ''}.
-            {guess.alternatives.length > 0 && ` Could also be: ${guess.alternatives.join(', ')}.`} Check it before publishing.
+            {guess.fieldMarks && ` Going by: ${guess.fieldMarks}.`}
+            {guess.alternatives.length > 0 && (
+              <>
+                {' '}Could also be:{' '}
+                {guess.alternatives.map((alt, i) => (
+                  <span key={alt}>
+                    {i > 0 && ', '}
+                    <button type="button" disabled={disabled} onClick={() => pickAlternative(alt)} className="underline hover:text-ink-muted disabled:opacity-40">
+                      {alt}
+                    </button>
+                  </span>
+                ))}
+                .
+              </>
+            )}{' '}
+            Check it before publishing.
           </p>
         )}
         {message && (

@@ -247,7 +247,14 @@ function mockOutput(variant: string, ctx: SuggestContext): ModelOutput {
   const place = ctx.location?.name ?? 'the marsh';
   const tag = variant.toUpperCase();
   return {
-    subject: { present: true, commonName: name, scientificName: given ? '' : 'Ardea herodias', confidence: given ? 'high' : 'medium', alternatives: given ? [] : ['Great Egret'] },
+    subject: {
+      present: true,
+      fieldMarks: given ? '' : 'grey-blue body, black stripe over the eye, long neck',
+      commonName: name,
+      scientificName: given ? '' : 'Ardea herodias',
+      confidence: given ? 'high' : 'medium',
+      alternatives: given ? [] : ['Great Egret'],
+    },
     titles: [`${name}, Waiting (${tag})`, `${name} at First Light (${tag})`, `Still Water, ${name} (${tag})`],
     captions: {
       fieldNotes: `[${tag}] A ${name.toLowerCase()} stands motionless at ${place}.`,

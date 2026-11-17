@@ -35,10 +35,13 @@ A **Suggest** button on each upload card and on the photo edit page asks a model
 
 ## Subject
 
+The subject is any living thing: a bird or other animal, an insect, or a plant (flower, tree, fungus). Landscapes, night skies and people have none.
+
 General models are unreliable at species-level identification, so the subject is an input:
 
 - If the owner fills in **Subject**, the prompt tells the model the name is correct and to write around it. `toSuggestion` reports confidence `given`.
-- If it is blank, the model may name the subject as far as it is sure. The island fills the field with the guess and shows a note with the confidence and alternatives, to be checked before publishing.
+- If it is blank, the model first writes the field marks it sees (`fieldMarks`, placed before the name in the schema so the model looks before it commits). It then names the species when those marks settle it ("House Finch", confidence high or medium). It falls back to the group ("a finch", confidence low) only when the photo can't tell the likely species apart. Before this rule, it stopped at the group even on clear photos.
+- The island fills the field with the guess and shows a note with the confidence, the field marks and the alternatives, to be checked before publishing. Each alternative is a button: clicking one makes it the subject, as the owner's word, and the next Suggest writes around it.
 - While the field still holds that untouched guess, a re-run sends no subject, so the model's own guess never comes back to it as the owner's word. Editing the field makes it the owner's. The flag lives in the island only: once saved and reloaded, a stored subject counts as given.
 
 ## Saved captions

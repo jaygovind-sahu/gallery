@@ -283,7 +283,7 @@ Tones: **field notes** (plain, observational), **poetic** (quiet, reflective), *
 **Rules**
 
 - A photo is sent to a model only when the owner clicks Suggest for that photo. No automatic or bulk generation; family photos stay out unless asked for.
-- If the photo's subject is a bird, another animal or an insect, its name goes in every title and caption.
+- If the photo's subject is a bird, another animal, an insect or a plant (a flower, tree or fungus), its name goes in every title and caption.
 - The subject is an input. General models are unreliable at species-level identification, so the owner types the subject when it is known and the model writes around it. If it is left blank the model may name the subject as far as it is sure; the admin shows that name as a guess, with its confidence and alternatives, to be checked before publishing.
 - The model is given the location's name and region, the month and year, the categories, the gear and any Lightroom keywords. It is never given GPS coordinates, the exact date or time, or the original file: the browser sends a 1568 px JPEG copy.
 - One request returns everything (all tones, titles, hashtags), using each provider's structured-output mode.
