@@ -38,6 +38,8 @@ export default defineConfig({
         '@dnd-kit/core',
         '@dnd-kit/sortable',
         '@dnd-kit/utilities',
+        '@anthropic-ai/sdk',
+        '@anthropic-ai/sdk/helpers/zod',
       ],
     },
   },

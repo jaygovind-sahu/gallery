@@ -1,0 +1,15 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import AiSettings from '../../components/admin/AiSettings';
+import { availableModels, getAiSettings } from '../../lib/ai';
+import { modelKey, tallyVotes } from '../../lib/ai-pure';
+import { listAiVotes } from '../../lib/db';
+
+const [settings, votes] = await Promise.all([getAiSettings(), listAiVotes()]);
+const models = availableModels(Astro.url).map((m) => ({ provider: m.provider, model: m.model, key: modelKey(m) }));
+---
+
+<Admin title="AI" current="ai">
+  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">AI suggestions</h1>
+  <AiSettings client:load initial={{ settings, models, votes: votes.length, tally: tallyVotes(votes) }} />
+</Admin>

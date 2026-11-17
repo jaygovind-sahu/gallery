@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 // Milestone 3 check: 5 JPEGs (landscape, portrait, GPS, no EXIF, ~30 MB) upload from desktop and a phone-sized
@@ -102,7 +103,8 @@ test('uploads a batch with shared fields and stores EXIF and dimensions', async 
   const landscape = byName['landscape.jpg'];
   expect(landscape.title).toBe('Blue sky over the marsh');
   expect([landscape.width, landscape.height]).toEqual([3000, 2000]);
-  expect(landscape.bytes).toBe(75705);
+  // The stored size is the file's own; the exact number depends on the sharp build that generated the fixture.
+  expect(landscape.bytes).toBe((await stat(fixtures('landscape.jpg'))).size);
   expect(landscape.camera).toBe('Nikon Z50_2');
   expect(landscape.lens).toBe('TAMRON 50-400mm F4.5-6.3 Di III VC VXD');
   expect(landscape.focalLengthMm).toBe(400);

@@ -1,14 +1,16 @@
 # Data model
 
-The schema is [migrations/0001_init.sql](../migrations/0001_init.sql); the commented version is in [DESIGN.md → Data model](../docs/DESIGN.md#data-model). Seeds are [migrations/0002_seed.sql](../migrations/0002_seed.sql).
+The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003_ai_captions.sql](../migrations/0003_ai_captions.sql); the commented version is in [DESIGN.md → Data model](../docs/DESIGN.md#data-model). Seeds are [migrations/0002_seed.sql](../migrations/0002_seed.sql).
 
 ## Tables at a glance
 
-- **`photos`**: one row per photo. `id` is a ULID and appears in public URLs. `status` goes `uploading` → `ready`, and `published` is 0/1. `r2_key` + `version` locate the original. `width`/`height` are in display orientation (after EXIF rotation). `placeholder` is a base64 ThumbHash. Then come the EXIF columns, the private `gps_lat`/`gps_lng`, the `watermark` flag, and `sort_order` (the order of `/all`).
+- **`photos`**: one row per photo. `id` is a ULID and appears in public URLs. `status` goes `uploading` → `ready`, and `published` is 0/1. `r2_key` + `version` locate the original. `width`/`height` are in display orientation (after EXIF rotation). `placeholder` is a base64 ThumbHash. Then come the EXIF columns, the private `gps_lat`/`gps_lng`, the `watermark` flag, and `sort_order` (the order of `/all`). `subject`, `hashtags` and `caption_tone` are private. `caption` is the public caption: a copy of the saved caption that `caption_tone` names ([ai.md](ai.md)).
+- **`photo_captions`**: the saved captions, one row per photo per tone, with an `edited` flag. Admin only.
+- **`ai_votes`**: one row per settled blind comparison (winner and loser as `provider:model`).
 - **`categories`**: slug, name, description, `cover_photo_id`, `default_layout` (`rows` | `masonry` | `grid`), `position`.
 - **`photo_categories`**: membership, with a per-category `position`. A photo can be in several categories.
 - **`locations`**: slug, name, region.
-- **`settings`**: key/value. `site_title` and `default_layout` are read by the public pages. `watermark_text` is seeded but nothing reads it: the watermark is a pre-rendered PNG ([images.md](images.md)).
+- **`settings`**: key/value. `site_title` and `default_layout` are read by the public pages. `ai_provider`, `ai_blind_test` and `ai_style_notes` are the AI settings. `watermark_text` is seeded but nothing reads it: the watermark is a pre-rendered PNG ([images.md](images.md)).
 
 ## The data layer: `src/lib/db.ts`
 
@@ -19,7 +21,10 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql); the comme
   - `getImageSource` serves the image route only. It holds the R2 key and never leaves the server.
 - **Mapping.** Rows are converted to camelCase objects (`toPublicPhoto`, `toAdminPhoto`, …); 0/1 columns become booleans. Empty strings are stored as `NULL` (`emptyToNull`).
 - **Atomic writes** go through `db().batch([...])`.
-- **Cleanup is explicit.** Deletes clear related rows themselves (covers, memberships, `location_id`) rather than relying on foreign-key actions.
+- **Cleanup is explicit.** Deletes clear related rows themselves (covers, memberships, saved captions, `location_id`) rather than relying on foreign-key actions.
+- **Saved captions** come back on `AdminPhoto.captions` from one `group_concat` (`\x1f` between tone, edited flag and text; `\x1e` between captions), so caption text is stripped of those two characters before it is stored. Caption writes go through `resolveCaptionWrite` ([captions.ts](../src/lib/captions.ts)), which keeps `photos.caption` and `caption_tone` in step with the rows.
+- **`listLocationCentroids`** averages the private GPS of photos per location for the upload page's location suggestion. Admin only.
+- **`findDuplicatePhotos`** matches a file about to be uploaded: same `bytes`, and the same filename or capture time.
 - **A photo's categories** come back from one `group_concat`, ordered by category position, with `\x1f` between slug and name and `\x1e` between categories.
 - **Slugs.** Create uses `slugify`, plus `-2`, `-3`, … until the slug is free. A PATCH to a slug that's taken is a 409 `slug_taken`.
 
@@ -38,7 +43,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql); the comme
 
 ## Migrations
 
-- A schema change is a **new** numbered file: `migrations/0003_<what>.sql`. Never edit an applied migration; 0001 and 0002 are applied locally and in production.
+- A schema change is a **new** numbered file: `migrations/0003_<what>.sql`. Never edit an applied migration; 0001 and 0002 are applied locally and in production. 0003 is applied locally; in production it must be applied before the code that needs it is deployed ([deploy.md](deploy.md)).
 - Apply locally with `pnpm db:migrate:local`. `pnpm db:migrate:remote` changes production, so ask the owner first ([deploy.md](deploy.md)).
 - Local D1 data is keyed by `database_id`. If the id in `wrangler.jsonc` changes, migrate again.
 - After adding a column, update in this order: the row interface and mapper in `db.ts`; then decide whether it's public (most aren't); then the zod schemas in `schemas.ts` if the admin edits it.

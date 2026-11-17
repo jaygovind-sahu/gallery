@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { EMPTY_METADATA, makePreview, readMetadata, type ParsedMetadata, type Preview } from '../../lib/client/metadata';
 import { api, formatBytes, putFile, withRetry, RequestFailed } from '../../lib/client/http';
+import type { DuplicateMatch } from '../../lib/db';
 import { exifLine, formatTakenAt } from '../../lib/exif-format';
+import { nearestLocation, type LocationCentroid } from '../../lib/geo';
+import TextFields, { EMPTY_TEXT, textPayload, type TextState } from './TextFields';
 import { useHydrated } from './ui';
 
 export interface CategoryOption {
@@ -17,6 +20,10 @@ export interface LocationOption {
 interface Props {
   categories: CategoryOption[];
   locations: LocationOption[];
+  /** Where earlier photos at each location were taken, to suggest a location from a new photo's GPS. */
+  centroids: LocationCentroid[];
+  /** Whether an AI provider is configured (shows the Suggest button). */
+  aiEnabled: boolean;
 }
 
 const ACCEPT = ['image/jpeg', 'image/png', 'image/webp'];
@@ -40,19 +47,39 @@ interface Item {
   note?: string;
   meta: ParsedMetadata;
   preview?: Preview;
-  title: string;
-  caption: string;
-  /** Per-photo override of the shared fields; null = use shared. */
+  text: TextState;
+  /** Per-photo override of the shared fields; null = use shared. Fixed to what was sent once the row exists. */
   override: Shared | null;
+  /** A location the owner has used before, close to this photo's GPS position. */
+  gpsLocationId: string | null;
+  /** Photos already in the library that look like this file. */
+  duplicates: DuplicateMatch[];
   /** Server id once the row exists (kept across retries so a retry never creates a second row). */
   id?: string;
+  /** The editable fields as the server last received them, to tell when there is something to save. */
+  sent?: string;
+  saving?: boolean;
 }
 
 let counter = 0;
 
-export default function UploadQueue({ categories, locations }: Props) {
+/** Remembered between visits. Draft is the default so a batch never goes live untitled by accident. */
+const VISIBILITY_KEY = 'gallery.upload.published';
+
+/** The shared fields in effect for one photo; a GPS match fills in the location when the batch has none. */
+function fieldsFor(item: Item, shared: Shared): Shared {
+  return item.override ?? { ...shared, locationId: shared.locationId || item.gpsLocationId || '' };
+}
+
+/** Everything about a photo that can still be changed after its row exists. */
+function editablePayload(item: Item, shared: Shared) {
+  const fields = fieldsFor(item, shared);
+  return { ...textPayload(item.text), locationId: fields.locationId || null, categoryIds: fields.categoryIds, published: fields.published };
+}
+
+export default function UploadQueue({ categories, locations, centroids, aiEnabled }: Props) {
   const [items, setItems] = useState<Item[]>([]);
-  const [shared, setShared] = useState<Shared>({ locationId: '', categoryIds: [], published: true });
+  const [shared, setShared] = useState<Shared>({ locationId: '', categoryIds: [], published: false });
   const [dragging, setDragging] = useState(false);
   const itemsRef = useRef<Item[]>([]);
   const sharedRef = useRef(shared);
@@ -81,13 +108,30 @@ export default function UploadQueue({ categories, locations }: Props) {
         }
         try {
           const preview = await makePreview(file);
-          patch(key, { status: 'ready', meta, preview, title: meta.title ?? '', caption: meta.caption ?? '' });
+          const own = meta.caption?.trim();
+          patch(key, {
+            status: 'ready',
+            meta,
+            preview,
+            gpsLocationId: nearestLocation(meta.gpsLat, meta.gpsLng, centroids),
+            text: { ...EMPTY_TEXT, title: meta.title ?? '', captions: own ? [{ tone: 'own', text: own, edited: true }] : [], captionTone: own ? 'own' : null },
+          });
         } catch (err) {
           patch(key, { status: 'error', meta, error: (err as Error).message || 'Could not read this image.' });
+          return;
+        }
+        // Warn before a second copy of a photo goes in. Advisory only, so a failed check is ignored.
+        try {
+          const { matches } = await api<{ matches: Record<string, DuplicateMatch[]> }>('POST', '/api/admin/photos/duplicates', {
+            files: [{ key, originalFilename: file.name, bytes: file.size, takenAt: meta.takenAt }],
+          });
+          if (matches[key]?.length) patch(key, { duplicates: matches[key] });
+        } catch {
+          /* no warning */
         }
       });
     },
-    [patch],
+    [patch, centroids],
   );
 
   const addFiles = useCallback(
@@ -95,7 +139,7 @@ export default function UploadQueue({ categories, locations }: Props) {
       const next: Item[] = [];
       for (const file of Array.from(files)) {
         const key = `f${++counter}`;
-        const base: Item = { key, file, status: 'reading', progress: 0, meta: EMPTY_METADATA, title: '', caption: '', override: null };
+        const base: Item = { key, file, status: 'reading', progress: 0, meta: EMPTY_METADATA, text: EMPTY_TEXT, override: null, gpsLocationId: null, duplicates: [] };
         if (!ACCEPT.includes(file.type)) {
           next.push({ ...base, status: 'error', error: 'Only JPEG, PNG and WebP are accepted.' });
         } else if (file.size > MAX_BYTES) {
@@ -124,13 +168,50 @@ export default function UploadQueue({ categories, locations }: Props) {
     };
   }, []);
 
+  // Visibility: start from the last choice made on this device.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(VISIBILITY_KEY) === '1') setShared((s) => ({ ...s, published: true }));
+    } catch {
+      /* private mode: stay on draft */
+    }
+  }, []);
+  const changeShared = useCallback((next: Shared) => {
+    setShared(next);
+    try {
+      localStorage.setItem(VISIBILITY_KEY, next.published ? '1' : '0');
+    } catch {
+      /* not remembered */
+    }
+  }, []);
+
+  /** Send whatever changed on a photo whose row already exists. */
+  const saveEdits = useCallback(
+    async (key: string) => {
+      const item = itemsRef.current.find((it) => it.key === key);
+      if (!item?.id) return;
+      const payload = editablePayload(item, sharedRef.current);
+      const body = JSON.stringify(payload);
+      if (body === item.sent) return;
+      patch(key, { saving: true, note: 'Saving…' });
+      try {
+        await withRetry(() => api('PATCH', `/api/admin/photos/${item.id}`, payload));
+        patch(key, { saving: false, sent: body, note: 'Saved' });
+      } catch (err) {
+        patch(key, { saving: false, note: `Not saved: ${err instanceof RequestFailed ? err.message : (err as Error).message}` });
+      }
+    },
+    [patch],
+  );
+
   // Steps 5–7: create the row, then PUT the file; two at a time; retries with backoff.
   const uploadOne = useCallback(
     async (item: Item) => {
-      const fields = item.override ?? sharedRef.current;
+      const fields = fieldsFor(item, sharedRef.current);
       try {
         let id = item.id;
         if (!id) {
+          const editable = editablePayload(item, sharedRef.current);
           patch(item.key, { status: 'creating', error: undefined, note: undefined });
           const created = await withRetry(
             () =>
@@ -141,12 +222,8 @@ export default function UploadQueue({ categories, locations }: Props) {
                 width: item.preview?.width ?? 1,
                 height: item.preview?.height ?? 1,
                 placeholder: item.preview?.placeholder ?? null,
-                title: item.title || null,
-                caption: item.caption || null,
+                ...editable,
                 takenAt: item.meta.takenAt,
-                locationId: fields.locationId || null,
-                categoryIds: fields.categoryIds,
-                published: fields.published,
                 watermark: true,
                 gpsLat: item.meta.gpsLat,
                 gpsLng: item.meta.gpsLng,
@@ -162,7 +239,8 @@ export default function UploadQueue({ categories, locations }: Props) {
             (n) => patch(item.key, { note: `Retrying (${n})…` }),
           );
           id = created.id;
-          patch(item.key, { id });
+          // From here the photo has its own copy of the shared fields: later changes to the batch settings don't reach it.
+          patch(item.key, (it) => ({ id, override: it.override ?? fields, sent: JSON.stringify(editable) }));
         }
         patch(item.key, { status: 'uploading', progress: 0, note: undefined });
         const headers: Record<string, string> = {};
@@ -173,12 +251,14 @@ export default function UploadQueue({ categories, locations }: Props) {
           (n) => patch(item.key, { note: `Retrying (${n})…`, progress: 0 }),
         );
         patch(item.key, { status: 'done', progress: 1, note: result.unverified ? 'Stored (not verified by the Images binding in dev).' : undefined });
+        // Anything typed while the file was on its way up.
+        await saveEdits(item.key);
       } catch (err) {
         const message = err instanceof RequestFailed ? err.message : (err as Error).message || 'Upload failed';
         patch(item.key, { status: 'error', error: message, note: undefined });
       }
     },
-    [patch],
+    [patch, saveEdits],
   );
 
   const pump = useCallback(() => {
@@ -219,6 +299,23 @@ export default function UploadQueue({ categories, locations }: Props) {
   const readyCount = items.filter((it) => it.status === 'ready').length;
   const busy = items.some((it) => it.status === 'reading' || it.status === 'queued' || it.status === 'creating' || it.status === 'uploading');
   const doneCount = items.filter((it) => it.status === 'done').length;
+  const unsaved = (it: Item) => it.status === 'done' && it.sent !== undefined && JSON.stringify(editablePayload(it, shared)) !== it.sent;
+  const uploading = items.some((it) => it.status === 'queued' || it.status === 'creating' || it.status === 'uploading');
+  const leaveWouldLose = uploading || items.some((it) => it.saving || unsaved(it));
+
+  // Closing the tab mid-upload abandons it, so ask first.
+  useEffect(() => {
+    if (!leaveWouldLose) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [leaveWouldLose]);
+
+  /** Another file in this batch with the same name and size. */
+  const twinInBatch = (it: Item) => items.some((o) => o.key !== it.key && o.file.name === it.file.name && o.file.size === it.file.size);
 
   return (
     <div
@@ -242,7 +339,7 @@ export default function UploadQueue({ categories, locations }: Props) {
           <span className="text-sm text-ink-muted">JPEG, PNG or WebP up to 100 MB each. Drop files anywhere on this page.</span>
         </div>
 
-        <SharedFields shared={shared} onChange={setShared} categories={categories} locations={locations} />
+        <SharedFields shared={shared} onChange={changeShared} categories={categories} locations={locations} />
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button type="button" onClick={startAll} disabled={readyCount === 0} className={btnPrimary}>
@@ -269,9 +366,13 @@ export default function UploadQueue({ categories, locations }: Props) {
               shared={shared}
               categories={categories}
               locations={locations}
+              aiEnabled={aiEnabled}
+              unsaved={unsaved(it)}
+              twinInBatch={twinInBatch(it)}
               onChange={(changes) => patch(it.key, changes)}
               onRemove={() => removeItem(it.key)}
               onRetry={() => retry(it.key)}
+              onSave={() => saveEdits(it.key)}
             />
           ))}
         </ul>
@@ -356,22 +457,35 @@ function Card({
   shared,
   categories,
   locations,
+  aiEnabled,
+  unsaved,
+  twinInBatch,
   onChange,
   onRemove,
   onRetry,
+  onSave,
 }: {
   item: Item;
   shared: Shared;
   categories: CategoryOption[];
   locations: LocationOption[];
+  aiEnabled: boolean;
+  unsaved: boolean;
+  twinInBatch: boolean;
   onChange: (changes: Partial<Item>) => void;
   onRemove: () => void;
   onRetry: () => void;
+  onSave: () => void;
 }) {
-  const editable = item.status === 'ready' || item.status === 'error';
+  // Words and settings stay editable while the file uploads and after; changes made then are saved with PATCH.
+  const editable = item.status !== 'reading' && Boolean(item.preview) && !item.saving;
+  const removable = item.status === 'ready' || item.status === 'error' || item.status === 'done';
   const exif = exifLine(item.meta);
   const date = formatTakenAt(item.meta.takenAt);
   const dims = item.preview ? `${item.preview.width} × ${item.preview.height}` : null;
+  const fields = fieldsFor(item, shared);
+  const gpsLocation = locations.find((l) => l.id === item.gpsLocationId);
+  const fromGps = gpsLocation && !item.override && !shared.locationId;
 
   return (
     <li className="flex flex-col gap-3 rounded-md border border-divider bg-surface p-3">
@@ -394,42 +508,67 @@ function Card({
           {date && <p>{date}</p>}
           {exif && <p className="line-clamp-2">{exif}</p>}
           {item.meta.gpsLat !== null && <p>GPS present (kept private)</p>}
+          {fromGps && <p>Location from GPS: {gpsLocation.name}</p>}
+          {gpsLocation && !fromGps && fields.locationId !== gpsLocation.id && (
+            <p>
+              GPS suggests {gpsLocation.name} ·{' '}
+              <button type="button" disabled={!editable} onClick={() => onChange({ override: { ...fields, locationId: gpsLocation.id } })} className="text-ink underline">
+                Use
+              </button>
+            </p>
+          )}
           <StatusLine item={item} />
         </div>
       </div>
 
-      {item.status !== 'done' && (
+      {(item.duplicates.length > 0 || twinInBatch) && item.status !== 'done' && (
+        <p className="text-xs text-ink" role="note">
+          {item.duplicates.length > 0 ? (
+            <>
+              Looks like a photo already in the library:{' '}
+              <a href={`/admin/photos/${item.duplicates[0]!.id}`} target="_blank" rel="noreferrer" className="underline">
+                {item.duplicates[0]!.title || item.duplicates[0]!.originalFilename || 'open it'}
+              </a>
+              . Remove this card unless you want a second copy.
+            </>
+          ) : (
+            'This file is in the batch twice.'
+          )}
+        </p>
+      )}
+
+      {item.preview && (
         <div className="flex flex-col gap-2">
-          <input
-            value={item.title}
-            onChange={(e) => onChange({ title: e.target.value })}
-            placeholder="Title"
+          <TextFields
+            compact
+            name={item.key}
+            value={item.text}
+            onChange={(text) => onChange({ text })}
             disabled={!editable}
-            className={`${input} font-serif text-[15px]`}
-            aria-label="Title"
-          />
-          <textarea
-            value={item.caption}
-            onChange={(e) => onChange({ caption: e.target.value })}
-            placeholder="Caption"
-            disabled={!editable}
-            rows={2}
-            className={input}
-            aria-label="Caption"
+            aiEnabled={aiEnabled}
+            getImage={async () => item.file}
+            getContext={() => ({
+              takenAt: item.meta.takenAt,
+              locationId: fields.locationId || null,
+              categoryIds: fields.categoryIds,
+              camera: item.meta.camera,
+              lens: item.meta.lens,
+              focalLengthMm: item.meta.focalLengthMm,
+              keywords: item.meta.keywords,
+            })}
+            categories={categories}
+            categoryIds={fields.categoryIds}
+            onAddCategory={(id) => onChange({ override: { ...fields, categoryIds: [...fields.categoryIds, id] } })}
           />
           <details className="text-sm">
             <summary className="cursor-pointer text-ink-muted hover:text-ink">
-              {item.override ? 'Custom location, categories and visibility' : 'Use different location, categories or visibility'}
+              {item.id ? 'Location, categories and visibility' : item.override ? 'Custom location, categories and visibility' : 'Use different location, categories or visibility'}
             </summary>
             <div className="pt-3">
-              <SharedFields
-                compact
-                shared={item.override ?? shared}
-                onChange={(s) => onChange({ override: s })}
-                categories={categories}
-                locations={locations}
-              />
-              {item.override && (
+              <fieldset disabled={!editable} className="m-0 border-0 p-0">
+                <SharedFields compact shared={fields} onChange={(s) => onChange({ override: s })} categories={categories} locations={locations} />
+              </fieldset>
+              {item.override && !item.id && (
                 <button type="button" onClick={() => onChange({ override: null })} className="mt-2 text-xs text-ink-muted underline hover:text-ink">
                   Back to shared settings
                 </button>
@@ -453,12 +592,17 @@ function Card({
               Retry
             </button>
           )}
+          {unsaved && (
+            <button type="button" onClick={onSave} className="text-ink underline">
+              Save changes
+            </button>
+          )}
           {item.status === 'done' && item.id && (
             <a href={`/admin/photos/${item.id}`} className="text-ink underline">
               Edit
             </a>
           )}
-          {(editable || item.status === 'done') && (
+          {removable && (
             <button type="button" onClick={onRemove} className="text-ink-muted hover:text-ink">
               {item.status === 'done' ? 'Dismiss' : 'Remove'}
             </button>

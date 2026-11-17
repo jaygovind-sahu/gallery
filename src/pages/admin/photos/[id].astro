@@ -1,6 +1,7 @@
 ---
 import Admin from '../../../layouts/Admin.astro';
 import PhotoForm from '../../../components/admin/PhotoForm';
+import { aiEnabled } from '../../../lib/ai';
 import { getAdminPhoto, listCategories, listLocations } from '../../../lib/db';
 
 const id = Astro.params.id ?? '';
@@ -20,5 +21,6 @@ const heading = photo.title || photo.originalFilename || 'Untitled';
     photo={photo}
     categories={categories.map((c) => ({ id: c.id, name: c.name }))}
     locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+    aiEnabled={aiEnabled(Astro.url)}
   />
 </Admin>
