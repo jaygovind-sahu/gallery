@@ -15,7 +15,7 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | 5. Public gallery | done (Lighthouse and the real-phone / Safari checks are still to run by hand) |
 | 6. Admin management | done |
 | 7. Polish + deploy | next |
-| 8. AI suggestions, saved captions, upload improvements | done, built ahead of 7 at the owner's request. The real provider calls are untested until API keys are added; migration 0003 is not yet applied to production |
+| 8. AI suggestions, saved captions, upload improvements | done, built ahead of 7 at the owner's request. Deployed 2026-11-17 with migration 0003. The real provider calls are untested until API keys are added |
 
 ## Stack
 
