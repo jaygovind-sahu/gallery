@@ -45,6 +45,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
 
 - A schema change is a **new** numbered file: `migrations/0003_<what>.sql`. Never edit an applied migration; 0001 and 0002 are applied locally and in production. 0003 is applied locally; in production it must be applied before the code that needs it is deployed ([deploy.md](deploy.md)).
 - Apply locally with `pnpm db:migrate:local`. `pnpm db:migrate:remote` changes production, so ask the owner first ([deploy.md](deploy.md)).
+- The Deploy workflow applies new migrations to production on every push to `main`, before deploying the code. Merging a migration to `main` applies it.
 - Local D1 data is keyed by `database_id`. If the id in `wrangler.jsonc` changes, migrate again.
 - After adding a column, update in this order: the row interface and mapper in `db.ts`; then decide whether it's public (most aren't); then the zod schemas in `schemas.ts` if the admin edits it.
 

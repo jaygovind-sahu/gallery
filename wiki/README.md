@@ -23,7 +23,7 @@ Three places document the project, and each has its own job:
 | [public-gallery.md](public-gallery.md) | Public routes, layouts, tiles, lightbox, deterrents, caching, look and feel |
 | [development.md](development.md) | Local setup, `dev` vs `dev:live`, dev-server traps, local-vs-production differences |
 | [testing.md](testing.md) | Vitest and Playwright: what's covered, how to run, how to write tests that don't flake |
-| [deploy.md](deploy.md) | Cloudflare resources, deploying, debugging production |
+| [deploy.md](deploy.md) | Cloudflare resources, the GitHub Actions deploy and its secrets, debugging production |
 
 ## Keeping it current
 

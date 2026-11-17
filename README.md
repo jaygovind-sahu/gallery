@@ -48,9 +48,13 @@ Other scripts:
 | `pnpm test:e2e` | Playwright flows against the dev server (run `pnpm fixtures` once first; never with `dev:live` running) |
 | `pnpm preview` | build, then run the built Worker locally with `wrangler dev` |
 | `pnpm watermark ["© Name"]` | regenerate `public/watermark.png` |
-| `pnpm db:migrate:remote` | apply migrations to the production D1 |
+| `pnpm db:migrate:remote` | apply migrations to the production D1 by hand (the Deploy workflow does this on every push to `main`) |
 | `pnpm cf-typegen` | regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` or the names in `.dev.vars` |
-| `pnpm run deploy` | build and deploy to Cloudflare |
+| `pnpm run deploy` | build and deploy to Cloudflare by hand (normally the Deploy workflow does it) |
+
+## Deploying
+
+Every push to `main` deploys the live site through GitHub Actions ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)): unit tests, build, D1 migrations, then `wrangler deploy`. It can also be run from **Actions → Deploy → Run workflow**. The Cloudflare API token, account ID and the Worker's secrets (`OWNER_EMAIL`, the AI keys) are GitHub secrets on the `production` environment. Setup, and how changing or removing a secret works: [wiki/deploy.md](wiki/deploy.md#secrets).
 
 ## First deploy (Cloudflare account)
 
@@ -63,6 +67,7 @@ Other scripts:
 7. `pnpm run deploy` — the `custom_domain` route creates the DNS record for `gallery.jaygovindsahu.com`.
 8. **Zero Trust → Access → Applications → Add (self-hosted)**: domain `gallery.jaygovindsahu.com`, paths `/admin*` and `/api/admin/*`, policy "Allow" for your email only. Copy the **AUD tag** and your team domain (shown on the Access sign-in page's address, `<team>.cloudflareaccess.com`) into `vars` in `wrangler.jsonc`, top level and `env.live`, and deploy again. Done for this account: app `Gallery admin`, team `blue-shadow-d31f`.
 9. On jaygovindsahu.com, add a "Gallery" nav link to `https://gallery.jaygovindsahu.com`.
+10. Set up deploys from GitHub: API token, `production` environment and secrets, as in [wiki/deploy.md → One-time setup](wiki/deploy.md#one-time-setup).
 
 ## AI suggestions
 
@@ -71,8 +76,8 @@ A **Suggest** button on each upload card and on the photo edit page writes three
 Setup, once:
 
 1. Create an API key with a small prepaid balance and a monthly spend limit at one or both providers: [Anthropic Console](https://console.anthropic.com/) and [OpenAI Platform](https://platform.openai.com/).
-2. `pnpm wrangler secret put ANTHROPIC_API_KEY` and/or `pnpm wrangler secret put OPENAI_API_KEY`.
-3. `pnpm db:migrate:remote`, then `pnpm run deploy`.
+2. Add `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` as GitHub secrets on the `production` environment ([wiki/deploy.md](wiki/deploy.md#secrets)).
+3. Run the Deploy workflow (**Actions → Deploy → Run workflow**). It applies the migrations and sends the keys with the deploy.
 4. Open `/admin/ai`: pick the model, paste a few captions you like under "Your voice", and (with both keys) turn on the blind comparison.
 
 - **Models:** `ANTHROPIC_MODEL` (`claude-haiku-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
@@ -134,4 +139,6 @@ Setup, once:
 - Category and location pages return a plain-text 404 for unknown slugs until milestone 7 adds the 404 page.
 - `vite.optimizeDeps.include` in `astro.config.mjs` lists every runtime dependency. The Cloudflare adapter forwards it to the workerd environments; without it Vite discovers server-side dependencies on first use, re-optimises mid-session, and the request that triggered it (and any in flight) fails with "The file does not exist at `.vite/deps_ssr/...`". Add new dependencies to that list.
 - Local dev against live data is opt-in through a wrangler environment (`env.live`, `pnpm dev:live`) rather than `"remote": true` on the top-level bindings plus the adapter's `remoteBindings` switch: that switch is all-or-nothing, so it would also have turned the e2e tests and the remote-Images watermark check loose on live data. Bindings don't inherit into an env, so `env.live` repeats them; it has no routes and no workers.dev URL so it can't be deployed over the real domain by accident. Images stays local in `dev:live` to save transformations.
+- Deploys run on GitHub Actions, at the owner's request (free for a public repo): every push to `main`, plus a manual trigger. The job runs unit tests, build, `d1 migrations apply --remote`, then `wrangler deploy`, so migrations are no longer a separate manual step. The e2e suite isn't run there: it takes over 10 minutes and needs browsers. Third-party actions are pinned to commit SHAs.
+- Worker secrets are managed as GitHub secrets on a `production` environment limited to `main`, and go up with each deploy through `wrangler deploy --secrets-file`, in the same Worker version as the code. That flag is additive, so a secret not set in GitHub keeps its value on the Worker; `wrangler secret put` still works, and removing a secret also takes `wrangler secret delete`. Syncing only the secrets that are set, rather than requiring all three, means the AI keys stay optional.
 - `workers_dev` and `preview_urls` are set to `false` explicitly: the site is served only on gallery.jaygovindsahu.com, where Access covers the admin paths. (The Worker was first created as a placeholder from the dashboard, which enables workers.dev; the first deploy replaces it.)

@@ -21,9 +21,9 @@ One Astro app, deployed as one Cloudflare Worker, serves everything: public page
 | `ASSETS` | Static-asset binding added by the adapter; used to read `watermark.png` | adapter |
 | `SITE_URL` | Production origin. Its hostname is also how code tells production from local dev | `wrangler.jsonc` vars |
 | `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | Access JWT verification | `wrangler.jsonc` vars |
-| `OWNER_EMAIL` | The only email allowed into the admin | Worker secret in production, `.dev.vars` locally |
+| `OWNER_EMAIL` | The only email allowed into the admin | Worker secret in production, sent from GitHub with each deploy ([deploy.md](deploy.md#secrets)); `.dev.vars` locally |
 | `DEV_BYPASS_AUTH` | `1` skips the admin check off the production hostname | `.dev.vars` only |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | AI providers; a provider is available when its key is set ([ai.md](ai.md)) | Worker secrets in production, `.dev.vars` locally |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | AI providers; a provider is available when its key is set ([ai.md](ai.md)) | Worker secrets in production, sent from GitHub with each deploy ([deploy.md](deploy.md#secrets)); `.dev.vars` locally |
 | `ANTHROPIC_MODEL`, `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT` | Which model each provider runs | `wrangler.jsonc` vars |
 | `AI_MOCK` | `1` replaces the providers with canned answers off the production hostname | `.dev.vars` only |
 
