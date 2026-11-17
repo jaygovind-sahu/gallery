@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -28,6 +28,10 @@ async function open(page: Page, url: string): Promise<void> {
 
 const tile = (page: Page, id: string) => page.locator(`[data-gallery] a.tile[href="/p/${id}"]`).first();
 
+/** Loaded and faded in: TileImage keeps the <img> at opacity 0 over the placeholder until it knows it loaded. */
+const isShown = (img: Locator) =>
+  img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0 && getComputedStyle(el).opacity === '1');
+
 test.describe('public gallery', () => {
   const ids: string[] = [];
   let a = '';
@@ -54,7 +58,7 @@ test.describe('public gallery', () => {
       await expect(img).toHaveAttribute('width', '3000');
       await expect(img).toHaveAttribute('height', '2000');
       await expect(img).toHaveAttribute('srcset', new RegExp(`/img/${a}/v1/480 480w, /img/${a}/v1/768 768w, /img/${a}/v1/1080 1080w`));
-      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), { timeout: 30_000 }).toBe(true);
+      await expect.poll(() => isShown(img), { timeout: 30_000 }).toBe(true);
       // Untitled photo: the caption shows the location only.
       await expect(tile(page, b).locator('.tile-caption__location')).toHaveText('Marsh Creek State Park');
       await expect(tile(page, b).locator('.tile-caption__title')).toHaveCount(0);
@@ -140,6 +144,29 @@ test.describe('public gallery', () => {
     await page.keyboard.press('Escape');
     await expect(lightbox).toHaveCount(0);
     await expect(page).toHaveURL(/\/c\/birds$/);
+  });
+
+  test('tiles show in every layout when images load before hydration or fail once', async ({ page }) => {
+    // Photo a: answered at once, so it usually finishes before the island hydrates (as from the edge cache).
+    // Photo b: the first request for each URL fails, as a cold derivative can; the tile must retry.
+    const body = await readFile(fixture('landscape.jpg'));
+    const failed = new Set<string>();
+    await page.route('**/img/**', (route) => {
+      const url = route.request().url();
+      if (url.includes(`/img/${a}/`)) return route.fulfill({ status: 200, contentType: 'image/jpeg', body });
+      if (url.includes(`/img/${b}/`) && !failed.has(url)) {
+        failed.add(url);
+        return route.fulfill({ status: 503, body: 'Image service unavailable' });
+      }
+      return route.continue();
+    });
+    for (const layout of ['rows', 'masonry', 'grid']) {
+      await open(page, `/c/birds?layout=${layout}`);
+      for (const id of [a, b]) {
+        await expect.poll(() => isShown(tile(page, id).locator('img')), { message: `${layout} ${id}`, timeout: 30_000 }).toBe(true);
+      }
+    }
+    expect(failed.size).toBeGreaterThan(0);
   });
 
   test('deterrents: no drag, no context menu', async ({ page }) => {
