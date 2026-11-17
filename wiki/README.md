@@ -19,6 +19,7 @@ Three places document the project, and each has its own job:
 | [images.md](images.md) | Originals in R2, upload verification, the `/img` route, sizes, watermark, edge cache, admin preview |
 | [security.md](security.md) | Access JWT check, dev bypass, response headers, privacy rules, input validation |
 | [admin.md](admin.md) | Admin pages and islands, the upload flow, the admin JSON API |
+| [ai.md](ai.md) | AI suggestions: providers, what is sent, saved captions per tone, the blind comparison |
 | [public-gallery.md](public-gallery.md) | Public routes, layouts, tiles, lightbox, deterrents, caching, look and feel |
 | [development.md](development.md) | Local setup, `dev` vs `dev:live`, dev-server traps, local-vs-production differences |
 | [testing.md](testing.md) | Vitest and Playwright: what's covered, how to run, how to write tests that don't flake |

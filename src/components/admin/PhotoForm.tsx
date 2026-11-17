@@ -3,6 +3,7 @@ import type { AdminPhoto } from '../../lib/db';
 import { adminImageUrl, api, confirmDanger, formatBytes, putFile, RequestFailed } from '../../lib/client/http';
 import { makePreview, readMetadata } from '../../lib/client/metadata';
 import { formatShutter } from '../../lib/exif-format';
+import TextFields, { textPayload, type TextState } from './TextFields';
 import { badge, btn, btnDanger, btnPrimary, input, label, useHydrated } from './ui';
 
 interface Option {
@@ -13,11 +14,11 @@ interface Props {
   photo: AdminPhoto;
   categories: Option[];
   locations: Option[];
+  /** Whether an AI provider is configured (shows the Suggest button). */
+  aiEnabled: boolean;
 }
 
 interface FormState {
-  title: string;
-  caption: string;
   takenAt: string;
   locationId: string;
   categoryIds: string[];
@@ -34,8 +35,6 @@ interface FormState {
 
 function fromPhoto(p: AdminPhoto): FormState {
   return {
-    title: p.title ?? '',
-    caption: p.caption ?? '',
     takenAt: p.takenAt ?? '',
     locationId: p.locationId ?? '',
     categoryIds: p.categoryIds,
@@ -49,6 +48,10 @@ function fromPhoto(p: AdminPhoto): FormState {
     iso: p.iso === null ? '' : String(p.iso),
     exposureComp: p.exposureComp === null ? '' : String(p.exposureComp),
   };
+}
+
+function textFromPhoto(p: AdminPhoto): TextState {
+  return { title: p.title ?? '', subject: p.subject ?? '', hashtags: p.hashtags ?? '', captions: p.captions, captionTone: p.captionTone };
 }
 
 /** "1/2000" → 0.0005, "2.5" → 2.5, "" → null. */
@@ -67,9 +70,10 @@ function parseNum(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export default function PhotoForm({ photo: initial, categories, locations }: Props) {
+export default function PhotoForm({ photo: initial, categories, locations, aiEnabled }: Props) {
   const [photo, setPhoto] = useState(initial);
   const [form, setForm] = useState<FormState>(() => fromPhoto(initial));
+  const [text, setText] = useState<TextState>(() => textFromPhoto(initial));
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -86,8 +90,7 @@ export default function PhotoForm({ photo: initial, categories, locations }: Pro
     setStatus('Saving…');
     try {
       const { photo: updated } = await api<{ photo: AdminPhoto }>('PATCH', `/api/admin/photos/${photo.id}`, {
-        title: form.title || null,
-        caption: form.caption || null,
+        ...textPayload(text),
         takenAt: form.takenAt || null,
         locationId: form.locationId || null,
         categoryIds: form.categoryIds,
@@ -103,6 +106,7 @@ export default function PhotoForm({ photo: initial, categories, locations }: Pro
       });
       setPhoto(updated);
       setForm(fromPhoto(updated));
+      setText(textFromPhoto(updated));
       setStatus('Saved');
     } catch (err) {
       setStatus(err instanceof RequestFailed ? err.message : (err as Error).message);
@@ -220,12 +224,35 @@ export default function PhotoForm({ photo: initial, categories, locations }: Pro
       </div>
 
       <form onSubmit={save} className="flex flex-col gap-4">
-        <Field label="Title">
-          <input value={form.title} onChange={(e) => set('title', e.target.value)} className={`${input} font-serif text-base`} />
-        </Field>
-        <Field label="Caption">
-          <textarea value={form.caption} onChange={(e) => set('caption', e.target.value)} rows={3} className={input} />
-        </Field>
+        <TextFields
+          name="photo"
+          value={text}
+          onChange={setText}
+          disabled={busy}
+          aiEnabled={aiEnabled}
+          getImage={
+            photo.status === 'ready'
+              ? async () => {
+                  // The same private preview the page shows; the browser shrinks it before it is sent.
+                  const res = await fetch(adminImageUrl(photo.id, 1600, photo.version), { credentials: 'same-origin' });
+                  if (!res.ok) throw new Error('Could not load the photo to send.');
+                  return res.blob();
+                }
+              : null
+          }
+          getContext={() => ({
+            takenAt: form.takenAt || null,
+            locationId: form.locationId || null,
+            categoryIds: form.categoryIds,
+            camera: form.camera || null,
+            lens: form.lens || null,
+            focalLengthMm: parseNum(form.focalLengthMm),
+            keywords: [],
+          })}
+          categories={categories}
+          categoryIds={form.categoryIds}
+          onAddCategory={(id) => set('categoryIds', [...form.categoryIds, id])}
+        />
         <Field label="Date taken">
           <input type="datetime-local" step={1} value={form.takenAt} onChange={(e) => set('takenAt', e.target.value)} className={input} />
         </Field>

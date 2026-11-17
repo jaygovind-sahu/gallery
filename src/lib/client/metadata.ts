@@ -23,6 +23,8 @@ export interface ParsedMetadata {
   title: string | null;
   /** XMP dc:description / IPTC Caption. */
   caption: string | null;
+  /** XMP dc:subject / IPTC Keywords, as set in Lightroom. Passed to the AI as hints; not stored. */
+  keywords: string[];
 }
 
 export const EMPTY_METADATA: ParsedMetadata = {
@@ -39,6 +41,7 @@ export const EMPTY_METADATA: ParsedMetadata = {
   gpsLng: null,
   title: null,
   caption: null,
+  keywords: [],
 };
 
 export async function readMetadata(file: File): Promise<ParsedMetadata> {
@@ -81,7 +84,17 @@ export async function readMetadata(file: File): Promise<ParsedMetadata> {
     gpsLng: finite(gps?.longitude),
     title: str(tags.title) ?? str(tags.ObjectName) ?? str(tags.Headline) ?? null,
     caption: str(tags.description) ?? str(tags.Caption) ?? str(tags['Caption-Abstract']) ?? null,
+    keywords: list(tags.subject).concat(list(tags.Keywords)).filter((k, i, all) => all.indexOf(k) === i).slice(0, 60),
   };
+}
+
+/** Keyword lists arrive as one string, an array of strings, or XMP bag objects. */
+function list(v: unknown): string[] {
+  if (v === null || v === undefined) return [];
+  if (Array.isArray(v)) return v.flatMap(list);
+  if (typeof v === 'string') return v.split(/[,;]/).map((k) => k.replace(/\0/g, '').trim()).filter(Boolean);
+  const s = str(v);
+  return s ? [s] : [];
 }
 
 /** "2026:10:12 14:03:11" → "2026-10-12T14:03:11"; Dates and ISO strings pass through as local time. */
@@ -207,14 +220,14 @@ export async function makePreview(file: File, cardWidth = 640): Promise<Preview>
   }
 }
 
-interface Decoded {
+export interface Decoded {
   width: number;
   height: number;
   element: CanvasImageSource;
   release: () => void;
 }
 
-async function decode(file: File): Promise<Decoded> {
+export async function decode(file: Blob): Promise<Decoded> {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });

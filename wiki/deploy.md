@@ -8,6 +8,7 @@ First-time account setup (bucket, database, Access application, secret) is in [R
 - **D1** `gallery-db`, **R2** `gallery-originals` (private), and the **Images** binding.
 - **Access application** "Gallery admin" on `/admin*` and `/api/admin/*`, owner's email only. Its team domain and AUD tag are in `wrangler.jsonc` vars.
 - **Secret** `OWNER_EMAIL` (`pnpm wrangler secret put OWNER_EMAIL`).
+- **Secrets** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` for AI suggestions, once the owner has added them. Either can be missing: the provider is then unavailable, and with neither the Suggest button is hidden ([ai.md](ai.md)).
 
 ## Deploying
 
@@ -28,4 +29,5 @@ First-time account setup (bucket, database, Access application, secret) is in [R
   3. Run `pnpm wrangler dev -c <that file> --port 8788`. Don't write anything.
   4. Delete the copy afterwards.
 - **Dev server against live data:** `pnpm dev:live` ([development.md](development.md)). Writes are real.
+- **AI suggestions failing:** the island shows the provider's reason (bad key, unknown model, rate or spend limit). `wrangler tail` shows one `ai_suggest` line per successful call with token counts. The first real calls after adding a key are the first time that provider's code path has run for real ([ai.md](ai.md#not-verified-here)).
 - **Images quota:** past 5,000 unique transformations a month on the free plan, new derivatives fail with 9422. The route logs "images quota exhausted" and answers 503; cached derivatives keep working ([images.md](images.md)).

@@ -17,6 +17,7 @@ Self-hosted photography gallery for gallery.jaygovindsahu.com on Cloudflare (Ast
 | Uploads to R2, `/img`, sizes, watermark | [wiki/images.md](wiki/images.md) |
 | Auth, headers, anything public-facing | [wiki/security.md](wiki/security.md) |
 | Admin pages or `/api/admin/*` | [wiki/admin.md](wiki/admin.md) |
+| AI suggestions, saved captions, hashtags | [wiki/ai.md](wiki/ai.md) |
 | Public pages, layouts, lightbox, styling | [wiki/public-gallery.md](wiki/public-gallery.md) |
 | Running things locally | [wiki/development.md](wiki/development.md) |
 | Tests | [wiki/testing.md](wiki/testing.md) |
@@ -40,4 +41,5 @@ Each rule is one line here; the linked page has the details.
 - **SQL:** prepared statements only, all in `src/lib/db.ts`. Schema changes go in a new numbered migration; never edit an applied one. [data-model.md](wiki/data-model.md)
 - **Bindings:** use `import { env } from 'cloudflare:workers'`; `Astro.locals.runtime` doesn't exist. [architecture.md](wiki/architecture.md)
 - **Look and feel:** use the tokens in `src/styles/global.css`. Dark only, no accent color, no gradients, no shadows on photos, no third-party scripts or fonts (the CSP is self-only). [public-gallery.md](wiki/public-gallery.md)
-- **Cost:** stay within Cloudflare free tiers. Don't add services beyond D1, R2, Images and Access without asking. [images.md](wiki/images.md)
+- **Cost:** stay within Cloudflare free tiers. Don't add services beyond D1, R2, Images and Access without asking; the owner has approved the Anthropic and OpenAI APIs for AI suggestions only. [images.md](wiki/images.md)
+- **AI:** a photo goes to a model only when the owner clicks Suggest for it, as a downscaled copy with no GPS. Subject, hashtags and unshown captions are private. [ai.md](wiki/ai.md)

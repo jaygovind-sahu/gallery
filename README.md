@@ -15,6 +15,7 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 | 5. Public gallery | done (Lighthouse and the real-phone / Safari checks are still to run by hand) |
 | 6. Admin management | done |
 | 7. Polish + deploy | next |
+| 8. AI suggestions, saved captions, upload improvements | done, built ahead of 7 at the owner's request. The real provider calls are untested until API keys are added; migration 0003 is not yet applied to production |
 
 ## Stack
 
@@ -48,6 +49,7 @@ Other scripts:
 | `pnpm preview` | build, then run the built Worker locally with `wrangler dev` |
 | `pnpm watermark ["© Name"]` | regenerate `public/watermark.png` |
 | `pnpm db:migrate:remote` | apply migrations to the production D1 |
+| `pnpm cf-typegen` | regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` or the names in `.dev.vars` |
 | `pnpm run deploy` | build and deploy to Cloudflare |
 
 ## First deploy (Cloudflare account)
@@ -61,6 +63,24 @@ Other scripts:
 7. `pnpm run deploy` — the `custom_domain` route creates the DNS record for `gallery.jaygovindsahu.com`.
 8. **Zero Trust → Access → Applications → Add (self-hosted)**: domain `gallery.jaygovindsahu.com`, paths `/admin*` and `/api/admin/*`, policy "Allow" for your email only. Copy the **AUD tag** and your team domain (shown on the Access sign-in page's address, `<team>.cloudflareaccess.com`) into `vars` in `wrangler.jsonc`, top level and `env.live`, and deploy again. Done for this account: app `Gallery admin`, team `blue-shadow-d31f`.
 9. On jaygovindsahu.com, add a "Gallery" nav link to `https://gallery.jaygovindsahu.com`.
+
+## AI suggestions
+
+A **Suggest** button on each upload card and on the photo edit page writes three title options, a caption in three tones (field notes, poetic, playful) and hashtags. Captions are saved per tone: you choose which one the site shows, and can come back later to copy any of them, with or without the hashtags, for Instagram. Subject, hashtags and the captions you don't show stay private.
+
+Setup, once:
+
+1. Create an API key with a small prepaid balance and a monthly spend limit at one or both providers: [Anthropic Console](https://console.anthropic.com/) and [OpenAI Platform](https://platform.openai.com/).
+2. `pnpm wrangler secret put ANTHROPIC_API_KEY` and/or `pnpm wrangler secret put OPENAI_API_KEY`.
+3. `pnpm db:migrate:remote`, then `pnpm run deploy`.
+4. Open `/admin/ai`: pick the model, paste a few captions you like under "Your voice", and (with both keys) turn on the blind comparison.
+
+- **Models:** `ANTHROPIC_MODEL` (`claude-haiku-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
+- **Cost:** well under a cent per photo on either default model. Each call is logged with its token counts (`pnpm wrangler tail gallery`).
+- **Subject:** fill it in when you know the species. General models are unreliable at exact species, so a name the AI came up with is marked as a guess to check.
+- **Privacy:** a photo is sent only when you click Suggest for it, as a 1568 px copy, with the location's name and the month. GPS coordinates and the original are never sent.
+- **Blind comparison:** every Suggest runs both models and shows two unlabeled sets; you pick one. `/admin/ai` keeps the count and reveals the winner when you ask.
+- **Locally:** `AI_MOCK=1` in `.dev.vars` gives canned answers with no key and no cost.
 
 ## Lightroom export settings
 
@@ -78,6 +98,19 @@ Other scripts:
 - Admin auth accepts the JWT from the `Cf-Access-Jwt-Assertion` header first and falls back to the `CF_Authorization` cookie (both are set by Access). `/api/admin/*` failures return the JSON error shape; `/admin*` failures return plain-text 403.
 - The middleware also sets `X-Content-Type-Options` and `Referrer-Policy` on every response now; the CSP arrives with milestone 7.
 - Unit tests run in plain Node (`vitest`), not the Workers pool: everything tested is pure logic.
+- Milestone 8 (AI suggestions) was built before milestone 7 because the owner asked for it; DESIGN.md gained an "AI suggestions" section for it.
+- AI providers: Anthropic and OpenAI, approved by the owner as the only services outside Cloudflare. The provider is one function (`runModel` in `src/lib/ai.ts`), chosen by a setting, so swapping models is a config change. Claude goes through the official SDK; OpenAI through one `fetch`, to avoid a second SDK in the Worker bundle.
+- Default models are the cheapest tier of each provider (`claude-haiku-5-5`, `gpt-5-mini`): with the subject supplied by the owner, the remaining difference between models is writing style, which the blind comparison settles.
+- The subject is an input, not something the AI is trusted to find: general models do poorly at species-level identification. A name the model proposes is shown as a guess with its confidence.
+- Suggestions run only on a click, per photo. No automatic or bulk generation: it keeps family photos out by default and the cost at zero unless asked.
+- The image sent to the model is made in the browser (1568 px JPEG) from the picked file or the admin preview, so it costs no extra Images transformation and the Worker never reads an original for it.
+- `photos.caption` remains the public caption and holds a copy of the saved caption being shown. A pointer would have meant a join in every public query; the copy keeps public code and the privacy filter untouched.
+- Instagram has no separate caption field: any saved caption can be copied with the hashtags, and the owner said one or two sentences suits both.
+- Hashtags are private and stored normalised; they are not shown as tags on the site.
+- Upload visibility now defaults to draft and remembers the last choice per device.
+- Upload cards stay editable during and after the upload; edits after the row exists are saved with `PATCH`.
+- Resumable (multipart) uploads were left out: more moving parts than a retry of the whole file is worth until large uploads actually fail on cellular.
+- The location suggestion uses the average GPS position of photos already filed at each location, within 5 km. No coordinates are stored on locations.
 - Upload dimensions: the Images binding reports the stored pixel grid, the browser reports the display size after EXIF rotation. If both describe the same grid, the browser's orientation of the server's numbers is kept; otherwise the server's numbers win, swapped when the `X-Exif-Orientation` header (sent by the upload page) says the image is rotated.
 - The local Images binding (miniflare + sharp) reports a non-image with error 9523 and an "unsupported image format" message rather than production's 9412; both are treated as "not an image" (415). Any other inspection failure keeps the browser's values in local dev only and is a 502 in production.
 - XMP `dc:title` / IPTC ObjectName pre-fill the title and `dc:description` / IPTC Caption the caption, as Lightroom writes them.

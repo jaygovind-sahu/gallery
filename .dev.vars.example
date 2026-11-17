@@ -2,3 +2,9 @@
 # Skips the Cloudflare Access check on /admin and /api/admin. Ignored on the production hostname.
 DEV_BYPASS_AUTH=1
 OWNER_EMAIL=you@example.com
+
+# AI suggestions. Leave the keys empty to hide the Suggest button, or paste real keys to try real models locally.
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+# 1 = canned answers from two built-in stand-in "models": no key, no cost. Ignored on the production hostname.
+AI_MOCK=1

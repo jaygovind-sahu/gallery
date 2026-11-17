@@ -5,22 +5,15 @@
 import { defineMiddleware } from 'astro:middleware';
 import { env } from 'cloudflare:workers';
 import { extractAccessToken, verifyAccessJwt } from './lib/auth';
+import { isProductionHost } from './lib/host';
 
 function isAdminPath(pathname: string): boolean {
   return pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWith('/api/admin/');
 }
 
-function productionHostname(): string {
-  try {
-    return new URL(env.SITE_URL).hostname;
-  } catch {
-    return 'gallery.jaygovindsahu.com';
-  }
-}
-
 /** DEV_BYPASS_AUTH=1 skips the check, but never on the production hostname. */
 function devBypassAllowed(url: URL): boolean {
-  return env.DEV_BYPASS_AUTH === '1' && url.hostname !== productionHostname();
+  return env.DEV_BYPASS_AUTH === '1' && !isProductionHost(url.hostname, env.SITE_URL);
 }
 
 function forbidden(pathname: string, reason: string): Response {

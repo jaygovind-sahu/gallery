@@ -37,6 +37,16 @@ Family photos taken at home make these non-negotiable. Check them for any change
 - Derivatives carry no metadata: the transform doesn't copy it, and `tests/e2e/images.spec.ts` checks for that.
 - Originals are never served publicly. The R2 bucket has no public access, no `r2.dev` URL and no custom domain.
 - A draft's or unknown id's permalink `/p/:id` is a 404, and so are its image URLs.
+- `subject`, `hashtags`, `caption_tone` and the rows of `photo_captions` are admin-only. The public site gets `photos.caption`, the one caption the owner chose to show, and nothing else from them.
+
+## AI providers
+
+The only requests the Worker makes outside Cloudflare are to the Anthropic and OpenAI APIs, from `/api/admin/ai/suggest` ([ai.md](ai.md)).
+
+- A photo is sent only when the owner clicks Suggest for it. There is no automatic or bulk sending.
+- What goes out: a downscaled JPEG made in the browser, the location's name and region, the month and year, category names, gear, keywords and the owner's notes. GPS coordinates, the exact time and the original never leave.
+- The API keys are Worker secrets. The browser never talks to a provider, so the self-only CSP is unaffected.
+- `AI_MOCK=1` works only off the production hostname, like the dev bypass. Never set it as a production var.
 
 ## Input validation
 

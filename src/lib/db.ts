@@ -5,6 +5,8 @@
  */
 import { env } from 'cloudflare:workers';
 import { ulid } from 'ulid';
+import { TONES, normalizeHashtags, resolveCaptionWrite, type Caption, type Tone } from './captions';
+import type { LocationCentroid } from './geo';
 import { originalKey, type UploadMime } from './images';
 import { positionBetween, renumber } from './order';
 import { slugify } from './slug';
@@ -74,6 +76,13 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
 export async function getSetting(key: string): Promise<string | null> {
   const row = await db().prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string }>();
   return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  await db()
+    .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .bind(key, value)
+    .run();
 }
 
 // ───────────────────────── Photos (public) ─────────────────────────
@@ -300,6 +309,14 @@ export interface AdminPhoto {
   createdAt: string;
   updatedAt: string;
   categoryIds: string[];
+  /** "Great Blue Heron": what the photo is of, typed by the owner or confirmed from an AI guess. */
+  subject: string | null;
+  /** "#tag #tag", for Instagram. */
+  hashtags: string | null;
+  /** Every saved caption, one per tone. */
+  captions: Caption[];
+  /** Which saved caption `caption` is a copy of, i.e. the one the site shows. */
+  captionTone: Tone | null;
 }
 
 interface AdminPhotoRow {
@@ -333,11 +350,17 @@ interface AdminPhotoRow {
   created_at: string;
   updated_at: string;
   category_ids: string | null;
+  subject: string | null;
+  hashtags: string | null;
+  caption_tone: string | null;
+  saved_captions: string | null;
 }
 
 const ADMIN_PHOTO_SELECT = `
   SELECT p.*, l.name AS location_name,
-         (SELECT group_concat(pc.category_id) FROM photo_categories pc WHERE pc.photo_id = p.id) AS category_ids
+         (SELECT group_concat(pc.category_id) FROM photo_categories pc WHERE pc.photo_id = p.id) AS category_ids,
+         (SELECT group_concat(c.tone || char(31) || c.edited || char(31) || c.text, char(30))
+            FROM photo_captions c WHERE c.photo_id = p.id) AS saved_captions
     FROM photos p
     LEFT JOIN locations l ON l.id = p.location_id`;
 
@@ -373,7 +396,37 @@ function toAdminPhoto(r: AdminPhotoRow): AdminPhoto {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     categoryIds: r.category_ids ? r.category_ids.split(',') : [],
+    subject: r.subject,
+    hashtags: r.hashtags,
+    captions: parseSavedCaptions(r.saved_captions),
+    captionTone: isTone(r.caption_tone) ? r.caption_tone : null,
   };
+}
+
+function isTone(v: string | null): v is Tone {
+  return v !== null && (TONES as readonly string[]).includes(v);
+}
+
+/** Undo the group_concat in ADMIN_PHOTO_SELECT; rows come back in tone order. */
+function parseSavedCaptions(packed: string | null): Caption[] {
+  if (!packed) return [];
+  const captions = packed.split('\x1e').flatMap((row) => {
+    const [tone = '', edited = '0', text = ''] = row.split('\x1f');
+    return isTone(tone) && text ? [{ tone, text, edited: edited === '1' }] : [];
+  });
+  return captions.sort((a, b) => TONES.indexOf(a.tone) - TONES.indexOf(b.tone));
+}
+
+/** Replace a photo's saved captions with the given rows. */
+function captionStatements(photoId: string, rows: Caption[]): D1PreparedStatement[] {
+  return [
+    db().prepare('DELETE FROM photo_captions WHERE photo_id = ?').bind(photoId),
+    ...rows.map((c) =>
+      db()
+        .prepare('INSERT INTO photo_captions (photo_id, tone, text, edited) VALUES (?, ?, ?, ?)')
+        .bind(photoId, c.tone, c.text, c.edited ? 1 : 0),
+    ),
+  ];
 }
 
 export async function getAdminPhoto(id: string): Promise<AdminPhoto | null> {
@@ -415,13 +468,14 @@ export async function listAdminPhotos(filter: AdminPhotoFilter = {}): Promise<Ad
 export async function createPhoto(input: CreatePhotoInput): Promise<string> {
   const id = ulid();
   const key = originalKey(id, 1, input.mime);
+  const captions = resolveCaptionWrite(input, { captions: [], captionTone: null });
   const statements = [
     db()
       .prepare(
         `INSERT INTO photos (id, status, published, r2_key, version, original_filename, mime, bytes, width, height, placeholder,
                              title, caption, taken_at, location_id, camera, lens, focal_length_mm, aperture, shutter_s, iso,
-                             exposure_comp, gps_lat, gps_lng, watermark, sort_order)
-         VALUES (?, 'uploading', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                             exposure_comp, gps_lat, gps_lng, watermark, subject, hashtags, caption_tone, sort_order)
+         VALUES (?, 'uploading', ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                  (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM photos))`,
       )
       .bind(
@@ -435,7 +489,7 @@ export async function createPhoto(input: CreatePhotoInput): Promise<string> {
         input.height,
         input.placeholder ?? null,
         emptyToNull(input.title),
-        emptyToNull(input.caption),
+        captions.display ?? null,
         input.takenAt ?? null,
         input.locationId ?? null,
         emptyToNull(input.camera),
@@ -448,8 +502,12 @@ export async function createPhoto(input: CreatePhotoInput): Promise<string> {
         input.gpsLat ?? null,
         input.gpsLng ?? null,
         input.watermark ? 1 : 0,
+        emptyToNull(input.subject),
+        normalizeHashtags(input.hashtags),
+        captions.tone ?? null,
       ),
     ...uniq(input.categoryIds).map((categoryId) => appendToCategoryStatement(id, categoryId)),
+    ...(captions.rows?.length ? captionStatements(id, captions.rows).slice(1) : []),
   ];
   await db().batch(statements);
   return id;
@@ -490,7 +548,16 @@ export async function updatePhoto(id: string, patch: PatchPhotoInput): Promise<v
     binds.push(value);
   };
   if (patch.title !== undefined) col('title', emptyToNull(patch.title));
-  if (patch.caption !== undefined) col('caption', emptyToNull(patch.caption));
+  if (patch.subject !== undefined) col('subject', emptyToNull(patch.subject));
+  if (patch.hashtags !== undefined) col('hashtags', normalizeHashtags(patch.hashtags));
+  // Captions: photos.caption is always a copy of the saved caption being shown (see captions.ts).
+  let captionRows: Caption[] | undefined;
+  if (patch.captions !== undefined || patch.captionTone !== undefined || patch.caption !== undefined) {
+    const write = resolveCaptionWrite(patch, await getSavedCaptions(id));
+    captionRows = write.rows;
+    if (write.display !== undefined) col('caption', write.display);
+    if (write.tone !== undefined) col('caption_tone', write.tone);
+  }
   if (patch.takenAt !== undefined) col('taken_at', patch.takenAt);
   if (patch.locationId !== undefined) col('location_id', patch.locationId);
   if (patch.published !== undefined) col('published', patch.published ? 1 : 0);
@@ -528,7 +595,46 @@ export async function updatePhoto(id: string, patch: PatchPhotoInput): Promise<v
     }
     for (const categoryId of wanted) statements.push(appendToCategoryStatement(id, categoryId));
   }
+  if (captionRows !== undefined) statements.push(...captionStatements(id, captionRows));
   if (statements.length) await db().batch(statements);
+}
+
+async function getSavedCaptions(photoId: string): Promise<{ captions: Caption[]; captionTone: Tone | null }> {
+  const [rows, photo] = await Promise.all([
+    db().prepare('SELECT tone, text, edited FROM photo_captions WHERE photo_id = ?').bind(photoId).all<{ tone: string; text: string; edited: number }>(),
+    db().prepare('SELECT caption_tone FROM photos WHERE id = ?').bind(photoId).first<{ caption_tone: string | null }>(),
+  ]);
+  return {
+    captions: rows.results.flatMap((r) => (isTone(r.tone) ? [{ tone: r.tone, text: r.text, edited: r.edited === 1 }] : [])),
+    captionTone: isTone(photo?.caption_tone ?? null) ? (photo!.caption_tone as Tone) : null,
+  };
+}
+
+/**
+ * Photos already in the library that look like the same file: same size, and the same filename or the
+ * same capture time. Used by the upload page to warn before a second copy goes in.
+ */
+export interface DuplicateProbe {
+  originalFilename: string | null;
+  bytes: number;
+  takenAt: string | null;
+}
+export interface DuplicateMatch {
+  id: string;
+  title: string | null;
+  originalFilename: string | null;
+}
+
+export async function findDuplicatePhotos(probe: DuplicateProbe): Promise<DuplicateMatch[]> {
+  const { results } = await db()
+    .prepare(
+      `SELECT id, title, original_filename FROM photos
+        WHERE bytes = ? AND ((? IS NOT NULL AND original_filename = ?) OR (? IS NOT NULL AND taken_at = ?))
+        ORDER BY created_at DESC LIMIT 3`,
+    )
+    .bind(probe.bytes, probe.originalFilename, probe.originalFilename, probe.takenAt, probe.takenAt)
+    .all<{ id: string; title: string | null; original_filename: string | null }>();
+  return results.map((r) => ({ id: r.id, title: r.title, originalFilename: r.original_filename }));
 }
 
 export interface ReplacedOriginal extends VerifiedOriginal {
@@ -556,6 +662,7 @@ export async function deletePhotos(ids: string[]): Promise<void> {
   await db().batch([
     db().prepare(`UPDATE categories SET cover_photo_id = NULL WHERE cover_photo_id IN (${marks})`).bind(...ids),
     db().prepare(`DELETE FROM photo_categories WHERE photo_id IN (${marks})`).bind(...ids),
+    db().prepare(`DELETE FROM photo_captions WHERE photo_id IN (${marks})`).bind(...ids),
     db().prepare(`DELETE FROM photos WHERE id IN (${marks})`).bind(...ids),
   ]);
 }
@@ -831,6 +938,36 @@ export async function mergeLocation(fromId: string, intoId: string): Promise<voi
     db().prepare('UPDATE photos SET location_id = ? WHERE location_id = ?').bind(intoId, fromId),
     db().prepare('DELETE FROM locations WHERE id = ?').bind(fromId),
   ]);
+}
+
+/**
+ * Where each location's photos were taken, on average, from the private GPS of photos already filed there.
+ * Admin only: the upload page uses it to suggest a location for a new photo with GPS.
+ */
+export async function listLocationCentroids(): Promise<LocationCentroid[]> {
+  const { results } = await db()
+    .prepare(
+      `SELECT location_id, AVG(gps_lat) AS lat, AVG(gps_lng) AS lng FROM photos
+        WHERE location_id IS NOT NULL AND gps_lat IS NOT NULL AND gps_lng IS NOT NULL
+        GROUP BY location_id`,
+    )
+    .all<{ location_id: string; lat: number; lng: number }>();
+  return results.map((r) => ({ locationId: r.location_id, lat: r.lat, lng: r.lng }));
+}
+
+// ───────────────────────── AI comparison votes ─────────────────────────
+
+export async function addAiVote(winner: string, loser: string): Promise<void> {
+  await db().prepare('INSERT INTO ai_votes (winner, loser) VALUES (?, ?)').bind(winner, loser).run();
+}
+
+export async function listAiVotes(): Promise<{ winner: string; loser: string }[]> {
+  const { results } = await db().prepare('SELECT winner, loser FROM ai_votes ORDER BY id').all<{ winner: string; loser: string }>();
+  return results;
+}
+
+export async function clearAiVotes(): Promise<void> {
+  await db().prepare('DELETE FROM ai_votes').run();
 }
 
 // ───────────────────────── helpers ─────────────────────────

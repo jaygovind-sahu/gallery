@@ -1,6 +1,6 @@
 # Gallery — Design Doc
 
-As of Oct 16, 2026 · Owner: Jaygovind Sahu
+As of Oct 16, 2026 · Owner: Jaygovind Sahu · AI suggestions added Nov 17, 2026
 
 ## Overview & goals
 
@@ -28,6 +28,7 @@ v1 is a public gallery plus a private admin; selling, social features and RAW ha
 - Full-screen lightbox: swipe, pinch/scroll zoom, keyboard arrows, info panel, shareable per-photo URL.
 - Download deterrents and a burned-in text watermark "© Jaygovind Sahu" on large derivatives only.
 - Private admin (laptop + mobile): batch upload, edit details, publish/unpublish, drag-to-reorder within a category, set category cover, delete, replace original, manage categories and locations.
+- AI suggestions in the admin: titles, a caption in each of three tones, and hashtags, on request per photo. Captions are saved per tone; the owner picks the one the site shows and reuses the others elsewhere (Instagram).
 
 **Non-goals (v1)**
 
@@ -137,6 +138,30 @@ CREATE TABLE settings (
 );
 ```
 
+Added by `migrations/0003_ai_captions.sql` (see AI suggestions):
+
+```sql
+CREATE TABLE photo_captions (
+  photo_id    TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  tone        TEXT NOT NULL CHECK (tone IN ('field-notes','poetic','playful','own')),
+  text        TEXT NOT NULL,
+  edited      INTEGER NOT NULL DEFAULT 0,  -- 1 once the owner has typed in it
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (photo_id, tone)
+);
+
+ALTER TABLE photos ADD COLUMN subject TEXT;       -- PRIVATE: "Great Blue Heron"
+ALTER TABLE photos ADD COLUMN hashtags TEXT;      -- PRIVATE: "#greatblueheron #birdphotography"
+ALTER TABLE photos ADD COLUMN caption_tone TEXT;  -- which saved caption photos.caption is a copy of
+
+CREATE TABLE ai_votes (                           -- one row per settled blind comparison
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  winner      TEXT NOT NULL,                      -- "anthropic:claude-haiku-5-5"
+  loser       TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
 **Seeds** (`migrations/0002_seed.sql`):
 
 - Categories, in this order: Birds (`birds`), Macro (`macro`), Landscape (`landscape`), Astro (`astro`), Family (`family`). Default layout `rows`.
@@ -149,6 +174,7 @@ CREATE TABLE settings (
 - New photos get `position` = max + 1 in each category they join (newest last) and `sort_order` likewise; the owner reorders from there.
 - GPS is stored for the owner only. Public pages, the image route and any public JSON must never include `gps_lat`/`gps_lng`, and served derivatives are stripped of all metadata (see Image delivery). Family photos taken at home make this a hard requirement.
 - Public queries always filter `status = 'ready' AND published = 1`.
+- `photos.caption` is the only caption the public site reads. It is a copy of the saved caption named by `caption_tone`, kept in step whenever captions are written. `subject`, `hashtags` and the other saved captions are private.
 
 ## Image storage & delivery
 
@@ -202,10 +228,11 @@ The browser does the EXIF reading and previews; the Worker stores the original, 
 1. Owner picks one or more files (`<input type=file multiple accept="image/jpeg,image/png,image/webp">`, plus drag-and-drop on desktop). Files over 100 MB are rejected in the browser.
 2. Browser parses metadata with `exifr`: DateTimeOriginal, Make/Model, LensModel, FocalLength, FNumber, ExposureTime, ISO, ExposureCompensation, Orientation, GPS. Also read XMP/IPTC title and description, so a title or caption set in Lightroom pre-fills the form.
 3. Browser computes display width/height (orientation applied) and a ThumbHash from a ~100 px downscale. Process files one at a time so phones don't run out of memory.
-4. Owner fills shared fields once for the batch (location, categories, publish now or save as draft), then per-photo title and caption on each card; any field can be overridden per photo.
+4. Owner fills shared fields once for the batch (location, categories, publish now or save as draft), then per-photo title, subject and caption on each card; any field can be overridden per photo. Visibility defaults to draft and remembers the last choice on the device. A card warns when its file looks like a photo already in the library (same size, and same filename or capture time), and when the photo has GPS it preselects the location whose earlier photos were taken within 5 km.
 5. `POST /api/admin/photos` with the metadata → returns `{ id }` and creates the row with `status = 'uploading'`.
 6. `PUT /api/admin/photos/:id/original` with the raw file body (XHR for a progress bar). The Worker streams it to R2, runs `env.IMAGES.info()` to confirm format and dimensions (server values win over the browser's), then sets `status = 'ready'`.
 7. Queue runs 2 uploads at a time, retries failed requests up to 3 times with backoff, and shows per-file progress and errors. A row stuck in `uploading` for over 24 h is shown in the admin with a retry/delete option.
+8. Cards stay editable while the file uploads and afterwards; changes made once the row exists are saved with `PATCH`. Leaving the page with uploads in flight or unsaved edits asks for confirmation.
 
 On iOS, the photo picker usually converts HEIC to JPEG when the input doesn't accept HEIC; verify on a device.
 
@@ -216,6 +243,7 @@ On iOS, the photo picker usually converts HEIC to JPEG when the input doesn't ac
 - `/admin/photos/:id` — large preview plus every field: title, caption, date, location, categories, EXIF values (editable when missing), watermark on/off, published. Buttons: Replace original, Delete (with confirm), View on site.
 - `/admin/categories` — create, rename, describe, reorder categories; per category set the default layout and the cover photo; open a category to drag-reorder its photos (touch-friendly, e.g. dnd-kit).
 - `/admin/locations` — create, rename, merge or delete locations.
+- `/admin/ai` — which model writes suggestions, the blind comparison and its results, the owner's notes on voice.
 
 **Admin API** (JSON, all under `/api/admin/`, all behind Access)
 
@@ -231,8 +259,50 @@ On iOS, the photo picker usually converts HEIC to JPEG when the input doesn't ac
 | `GET/POST/PATCH/DELETE categories` | category CRUD, cover, default layout, order |
 | `GET/POST/PATCH/DELETE locations` | location CRUD and merge |
 | `GET img/:id/:size` | private preview (Image delivery) |
+| `POST photos/duplicates` | which files about to be uploaded look like photos already in the library |
+| `POST ai/suggest` | downscaled image + context → titles, captions per tone, hashtags; stores nothing |
+| `GET/PATCH ai/settings` | provider, blind comparison, voice notes, comparison tally |
+| `POST ai/votes` | record the set chosen in a blind comparison |
 
 Validate every request body with a schema (zod). Return `{ error: { code, message } }` with a proper status on failure.
+
+## AI suggestions
+
+A Suggest button writes the words for one photo; the owner chooses, edits and saves. Everything here is admin-only except the one caption the owner chooses to show.
+
+**What it produces**
+
+| Piece | Length | Used for |
+| --- | --- | --- |
+| Title (three options) | 2–6 words, about 40 characters | The label under a tile, alt text, link previews |
+| Caption, one per tone | 1–2 sentences, about 100–200 characters | The info panel and link preview; reused on Instagram. It adds what the title can't and never repeats it |
+| Hashtags | 10–15 | Instagram only; private |
+
+Tones: **field notes** (plain, observational), **poetic** (quiet, reflective), **playful** (light, witty). A fourth saved caption, **own**, is the one the owner writes by hand.
+
+**Rules**
+
+- A photo is sent to a model only when the owner clicks Suggest for that photo. No automatic or bulk generation; family photos stay out unless asked for.
+- If the photo's subject is a bird, another animal or an insect, its name goes in every title and caption.
+- The subject is an input. General models are unreliable at species-level identification, so the owner types the subject when it is known and the model writes around it. If it is left blank the model may name the subject as far as it is sure; the admin shows that name as a guess, with its confidence and alternatives, to be checked before publishing.
+- The model is given the location's name and region, the month and year, the categories, the gear and any Lightroom keywords. It is never given GPS coordinates, the exact date or time, or the original file: the browser sends a 1568 px JPEG copy.
+- One request returns everything (all tones, titles, hashtags), using each provider's structured-output mode.
+- Nothing is saved or published by the request itself. Suggestions fill the form; the owner saves.
+- Re-running never overwrites the owner's words: an edited caption is kept and the new text is offered beside it, and a title, subject or hashtags already present are left alone.
+
+**Saved captions**
+
+- Each photo keeps at most one caption per tone in `photo_captions`. The owner marks one as shown; `photos.caption` holds a copy of it and is what the public site reads.
+- The edit page lists every saved caption with "Show on site", "Copy" and "Copy with hashtags", so a caption not used on the site can be taken to Instagram later.
+
+**Providers**
+
+- Anthropic (Claude Haiku) and OpenAI (GPT mini), the cheapest tier of each: with the subject supplied, what separates models is writing style. API keys are Worker secrets; the model names are vars. The provider is one swappable function.
+- **Blind comparison:** with both keys set and the option on, each Suggest runs both models and shows two unlabeled sets in random order. The owner's pick is recorded in `ai_votes`; `/admin/ai` reveals the tally on request, and the owner then sets the provider.
+- The owner's notes on voice (example captions, words to avoid) are stored in `settings` and sent with every request.
+- Without a key the Suggest button is hidden and everything else works as before.
+
+**Cost** — well under a cent per photo on either default model, and only when asked. The guardrail is a monthly spend limit set in each provider's console. Prompt caching does not apply (the prompt is below the minimum cacheable size) and batch pricing is not used (requests are interactive).
 
 ## Public gallery
 
@@ -306,6 +376,7 @@ Cloudflare Access keeps everyone but the owner out of the admin, and the Worker 
 - **Public surface**: the image route accepts only allowlisted sizes and existing published ids; public pages never expose drafts, GPS, R2 keys or internal fields.
 - **Headers**: a strict CSP (self + the image route; no third-party scripts), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. Admin pages also send `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
 - **SQL**: prepared statements only.
+- **AI providers**: the only outbound calls from the Worker, made from `/api/admin/ai/suggest` with keys held as Worker secrets. See AI suggestions for what is and is not sent. The browser never contacts a provider, so the CSP stays self-only.
 
 ## Project structure & config
 
@@ -317,6 +388,7 @@ One Astro project deployed as one Cloudflare Worker serves the public site, the 
 - TypeScript strict; Tailwind CSS; `zod` (validation), `jose` (Access JWT), `exifr`, `thumbhash`, `ulid`, `react-photo-album`, `yet-another-react-lightbox`, `@dnd-kit/*`.
 - D1 via prepared statements behind a small typed data layer (`src/lib/db.ts`).
 - Tests: Vitest (unit), Playwright (end to end). Package manager: pnpm.
+- `@anthropic-ai/sdk` for Claude; OpenAI is called with `fetch`.
 
 **Layout**
 
@@ -353,7 +425,7 @@ One Astro project deployed as one Cloudflare Worker serves the public site, the 
 └─ tests/
 ```
 
-**Bindings** (see `wrangler.jsonc`): `ORIGINALS` (R2 `gallery-originals`), `DB` (D1 `gallery-db`), `IMAGES` (Images binding); vars `SITE_URL`, `OWNER_EMAIL`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`.
+**Bindings** (see `wrangler.jsonc`): `ORIGINALS` (R2 `gallery-originals`), `DB` (D1 `gallery-db`), `IMAGES` (Images binding); vars `SITE_URL`, `OWNER_EMAIL`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ANTHROPIC_MODEL`, `OPENAI_MODEL`; secrets `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.
 
 Local dev uses `astro dev` with local D1 and R2 (via the Cloudflare adapter's platform proxy) and `DEV_BYPASS_AUTH=1` in `.dev.vars`. If the Images binding isn't available locally, fall back to returning the original bytes in dev only.
 
@@ -397,6 +469,8 @@ Build in this order; each milestone ends with its checks passing and a commit.
 6. **Admin management** — edit page, replace, delete, bulk actions, category and location managers, drag reorder, covers, default layout.
    - Done when: a reorder shows on the public page within about a minute; replace changes the image URL version and the new image appears; delete removes R2 objects and rows.
 7. **Polish + deploy** — Open Graph tags, 404 page, security headers, README with setup and Lightroom settings, production deploy steps verified with the owner.
+8. **AI suggestions** — Suggest on upload cards and the edit page, saved captions per tone with one shown, subject and hashtags, the two providers and the blind comparison, `/admin/ai`; upload improvements (draft default, edit while uploading, duplicate warning, location from GPS, leave warning).
+   - Done when: with a stand-in model, Suggest fills titles, three captions and hashtags without overwriting the owner's edits; the public page shows only the chosen caption; a blind pick is counted; and, with real keys, a bird photo with the subject given comes back with that name in every title and caption.
 
 ## Testing checklist
 
@@ -408,6 +482,8 @@ Unit tests cover the pure logic; Playwright covers the flows; the rest is checke
 - Fractional ordering: insert between, at start, at end; renumber when gaps get tiny.
 - Size allowlist and format negotiation from various `Accept` headers.
 - JWT verification cases (valid, expired, wrong aud, wrong email, bad signature).
+- Captions: what a write means for the shown caption; a re-run keeps edited captions; hashtag normalising.
+- AI: the text sent to the model carries the place and month but no time or coordinates; a model's answer is tidied and tied to real categories.
 
 **End to end (Playwright)**
 
@@ -415,6 +491,7 @@ Unit tests cover the pure logic; Playwright covers the flows; the rest is checke
 - Switch all three layouts; reload keeps the choice; `?layout=grid` overrides it.
 - Open the lightbox, swipe/arrow through, URL becomes `/p/:id`, Back closes it, a direct `/p/:id` load opens it.
 - Unpublish a photo: its page 404s and its image URLs 404.
+- With a stand-in model: Suggest on an upload card and on the edit page; choose a tone; the public page shows that caption and no other; a blind comparison records the pick.
 
 **Manual before launch**
 
@@ -426,6 +503,7 @@ Unit tests cover the pure logic; Playwright covers the flows; the rest is checke
 - [ ] Lightroom export with All Metadata pre-fills title, caption and EXIF
 - [ ] Upload works from an iPhone over cellular
 - [ ] Category page scores ≥ 90 in Lighthouse mobile performance
+- [ ] With real API keys: Suggest on a bird photo with the subject given, and on one without; the blind comparison shows two sets
 
 ## Future and open questions
 
@@ -449,3 +527,4 @@ Nothing here is built in v1; the schema and routes should simply not block it.
 
 - [Cloudflare Images pricing](https://developers.cloudflare.com/images/pricing/) — free tier of 5,000 unique transformations a month, $0.50 per 1,000 after, error 9422 past the free limit.
 - [Cloudflare Images: draw overlays and watermarks](https://developers.cloudflare.com/images/optimization/draw-overlays/) — `.draw()` on the Images binding, position and opacity options.
+- [RealBirdID: Benchmarking Bird Species Identification in the Era of MLLMs](https://arxiv.org/abs/2603.27033) — general multimodal models do poorly at species-level bird identification, which is why the subject is an input.

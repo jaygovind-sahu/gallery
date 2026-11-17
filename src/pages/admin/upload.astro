@@ -1,9 +1,10 @@
 ---
 import Admin from '../../layouts/Admin.astro';
 import UploadQueue from '../../components/admin/UploadQueue';
-import { listCategories, listLocations } from '../../lib/db';
+import { aiEnabled } from '../../lib/ai';
+import { listCategories, listLocationCentroids, listLocations } from '../../lib/db';
 
-const [categories, locations] = await Promise.all([listCategories(), listLocations()]);
+const [categories, locations, centroids] = await Promise.all([listCategories(), listLocations(), listLocationCentroids()]);
 ---
 
 <Admin title="Upload" current="upload">
@@ -12,5 +13,7 @@ const [categories, locations] = await Promise.all([listCategories(), listLocatio
     client:load
     categories={categories.map((c) => ({ id: c.id, name: c.name }))}
     locations={locations.map((l) => ({ id: l.id, name: l.name, region: l.region }))}
+    centroids={centroids}
+    aiEnabled={aiEnabled(Astro.url)}
   />
 </Admin>

@@ -6,7 +6,7 @@ Node 22+ and pnpm.
 
 ```sh
 pnpm install
-cp .dev.vars.example .dev.vars   # DEV_BYPASS_AUTH=1, OWNER_EMAIL
+cp .dev.vars.example .dev.vars   # DEV_BYPASS_AUTH=1, OWNER_EMAIL, AI_MOCK=1
 pnpm db:migrate:local            # schema + seeds into local D1
 pnpm dev                         # http://localhost:4321, admin at /admin
 ```
@@ -44,6 +44,7 @@ Code tells production from local dev by comparing the request's hostname with `S
 | Transform failure on `/img` | 503 | Original bytes, `no-store` |
 | Upload verification can't run | 502, object deleted | Browser dimensions kept, `unverified: true` |
 | Non-image upload error code | 9412 | 9523 |
+| AI suggestions | Real providers, for each key that is set | `AI_MOCK=1`: two canned stand-ins, no key and no cost. Set it to `0` and add a key to `.dev.vars` to try a real model locally |
 
 ## Before committing
 
