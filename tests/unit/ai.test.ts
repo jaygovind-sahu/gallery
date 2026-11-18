@@ -21,7 +21,7 @@ const categories = [
 ];
 
 const raw: ModelOutput = {
-  subject: { present: true, commonName: 'Great Blue Heron', scientificName: 'Ardea herodias', confidence: 'medium', alternatives: ['Great Egret', 'Great Egret', ''] },
+  subject: { present: true, fieldMarks: ' grey-blue body,\n long neck. ', commonName: 'Great Blue Heron', scientificName: 'Ardea herodias', confidence: 'medium', alternatives: ['Great Egret', 'Great Egret', ''] },
   titles: ['  Great Blue Heron, Waiting. ', 'Great Blue Heron, Waiting', 'Heron at Dawn', 'Fourth'],
   captions: { fieldNotes: 'A great blue heron\nstands still.', poetic: ' Patience. ', playful: '' },
   hashtags: ['GreatBlueHeron', '#Birds', 'birds'],
@@ -72,7 +72,7 @@ describe('toSuggestion', () => {
     expect(s.captions.poetic).toBe('Patience.');
     expect(s.hashtags).toEqual(['#greatblueheron', '#birds']);
     expect(s.categoryIds).toEqual(['c-birds']);
-    expect(s.subject).toEqual({ name: 'Great Blue Heron', scientificName: 'Ardea herodias', confidence: 'medium', alternatives: ['Great Egret'] });
+    expect(s.subject).toEqual({ name: 'Great Blue Heron', scientificName: 'Ardea herodias', confidence: 'medium', alternatives: ['Great Egret'], fieldMarks: 'grey-blue body, long neck' });
   });
 
   it('the owner’s subject wins over the model’s and is never a guess', () => {
@@ -80,6 +80,7 @@ describe('toSuggestion', () => {
     expect(s.subject.name).toBe('Green Heron');
     expect(s.subject.confidence).toBe('given');
     expect(s.subject.alternatives).toEqual([]);
+    expect(s.subject.fieldMarks).toBeNull();
   });
 
   it('reports no subject when the photo has none', () => {

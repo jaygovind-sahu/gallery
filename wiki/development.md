@@ -18,7 +18,7 @@ The full script list is in [README.md → Local development](../README.md#local-
 | Command | Runtime | Data | Notes |
 | --- | --- | --- | --- |
 | `pnpm dev` | `astro dev` on workerd | Local D1 and R2 under `.wrangler/` | Auth bypass from `.dev.vars`. The normal way to work |
-| `pnpm dev:live` | Same, with `CLOUDFLARE_ENV=live` | **Live** D1 and R2 (`env.live` in `wrangler.jsonc`; needs `wrangler login`) | Writes change the real gallery. The Images binding stays local |
+| `pnpm dev:live` | Same, with `CLOUDFLARE_ENV=live` | **Live** D1 and R2 (`env.live` in `wrangler.jsonc`; needs `wrangler login`) | Writes change the real gallery. The Images binding stays local. Reads `.dev.vars.live` instead of `.dev.vars` when it exists (no merging), which is where a real AI key goes |
 | `pnpm preview` | Built Worker under `wrangler dev` | Wrangler's own local D1, separate from `astro dev`'s and empty until migrated | Closest to production |
 
 - **Never** run e2e tests, probes that write, or scratch uploads while `dev:live` is up. Playwright reuses whatever server is on :4321.
@@ -44,7 +44,7 @@ Code tells production from local dev by comparing the request's hostname with `S
 | Transform failure on `/img` | 503 | Original bytes, `no-store` |
 | Upload verification can't run | 502, object deleted | Browser dimensions kept, `unverified: true` |
 | Non-image upload error code | 9412 | 9523 |
-| AI suggestions | Real providers, for each key that is set | `AI_MOCK=1`: two canned stand-ins, no key and no cost. Set it to `0` and add a key to `.dev.vars` to try a real model locally |
+| AI suggestions | Real providers, for each key that is set | `AI_MOCK=1`: two canned stand-ins, no key and no cost. For a real model, put the key and `AI_MOCK=0` in `.dev.vars.live` and use `dev:live`; keep keys out of `.dev.vars`, which the e2e tests use |
 
 ## Before committing
 

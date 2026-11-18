@@ -35,7 +35,7 @@ pnpm dev                           # http://localhost:4321
 
 `astro dev` runs on Cloudflare's `workerd` runtime with local D1 and R2 stored under `.wrangler/`. Local D1 data is keyed by `database_id`, so if the id in `wrangler.jsonc` changes, run `pnpm db:migrate:local` again. Bindings are typed from `wrangler.jsonc`; after changing it, run `pnpm cf-typegen`.
 
-**Working on the live data from your machine:** `pnpm dev:live` runs the same dev server against the live D1 database and R2 bucket (the `live` environment in `wrangler.jsonc`, selected by `CLOUDFLARE_ENV=live`; needs `pnpm wrangler login`). Uploads, edits and deletes made at `http://localhost:4321/admin` land in the real gallery, exactly as if made on gallery.jaygovindsahu.com. The admin auth bypass from `.dev.vars` still applies on localhost. The Images binding stays local in this mode, so previews on localhost have no watermark; the live site renders its own derivatives from the same originals. Don't run `pnpm test:e2e` while `dev:live` is running: Playwright reuses an open dev server and its tests upload and delete photos.
+**Working on the live data from your machine:** `pnpm dev:live` runs the same dev server against the live D1 database and R2 bucket (the `live` environment in `wrangler.jsonc`, selected by `CLOUDFLARE_ENV=live`; needs `pnpm wrangler login`). Uploads, edits and deletes made at `http://localhost:4321/admin` land in the real gallery, exactly as if made on gallery.jaygovindsahu.com. It reads `.dev.vars.live` instead of `.dev.vars` when that file exists (wrangler loads `.dev.vars.<env>` first, and doesn't merge the two), so a real AI key can live there while `pnpm dev` and the e2e tests stay on the mock. The admin auth bypass still applies on localhost. The Images binding stays local in this mode, so previews on localhost have no watermark; the live site renders its own derivatives from the same originals. Don't run `pnpm test:e2e` while `dev:live` is running: Playwright reuses an open dev server and its tests upload and delete photos.
 
 Other scripts:
 
@@ -80,12 +80,12 @@ Setup, once:
 3. Run the Deploy workflow (**Actions → Deploy → Run workflow**). It applies the migrations and sends the keys with the deploy.
 4. Open `/admin/ai`: pick the model, paste a few captions you like under "Your voice", and (with both keys) turn on the blind comparison.
 
-- **Models:** `ANTHROPIC_MODEL` (`claude-haiku-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
-- **Cost:** well under a cent per photo on either default model. Each call is logged with its token counts (`pnpm wrangler tail gallery`).
+- **Models:** `ANTHROPIC_MODEL` (`claude-sonnet-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
+- **Cost:** about 1.5–2 cents per photo on Sonnet, well under a cent on GPT mini. Each call is logged with its token counts (`pnpm wrangler tail gallery`).
 - **Subject:** fill it in when you know the species. General models are unreliable at exact species, so a name the AI came up with is marked as a guess to check.
 - **Privacy:** a photo is sent only when you click Suggest for it, as a 1568 px copy, with the location's name and the month. GPS coordinates and the original are never sent.
 - **Blind comparison:** every Suggest runs both models and shows two unlabeled sets; you pick one. `/admin/ai` keeps the count and reveals the winner when you ask.
-- **Locally:** `AI_MOCK=1` in `.dev.vars` gives canned answers with no key and no cost.
+- **Locally:** `AI_MOCK=1` in `.dev.vars` gives canned answers with no key and no cost. For real suggestions in `pnpm dev:live`, put the key and `AI_MOCK=0` in `.dev.vars.live` (it also needs `DEV_BYPASS_AUTH` and `OWNER_EMAIL`).
 
 ## Lightroom export settings
 
@@ -105,8 +105,8 @@ Setup, once:
 - Unit tests run in plain Node (`vitest`), not the Workers pool: everything tested is pure logic.
 - Milestone 8 (AI suggestions) was built before milestone 7 because the owner asked for it; DESIGN.md gained an "AI suggestions" section for it.
 - AI providers: Anthropic and OpenAI, approved by the owner as the only services outside Cloudflare. The provider is one function (`runModel` in `src/lib/ai.ts`), chosen by a setting, so swapping models is a config change. Claude goes through the official SDK; OpenAI through one `fetch`, to avoid a second SDK in the Worker bundle.
-- Default models are the cheapest tier of each provider (`claude-haiku-5-5`, `gpt-5-mini`): with the subject supplied by the owner, the remaining difference between models is writing style, which the blind comparison settles.
-- The subject is an input, not something the AI is trusted to find: general models do poorly at species-level identification. A name the model proposes is shown as a guess with its confidence.
+- Default models: `claude-sonnet-5-5` and `gpt-5-mini`. Claude started on Haiku, the cheapest tier, but it stopped at the group on hard identifications (a female House Finch) when the subject was left blank. The owner chose Sonnet for better identification at about 1.5–2 cents a photo instead of a tenth of a cent.
+- The subject is an input, not something the AI is trusted to find: general models do poorly at species-level identification. A name the model proposes is shown as a guess with its confidence. Without a subject, the model lists the field marks it sees before naming, and names the species when they settle it; it stops at the group ("a finch") only when the photo can't separate the candidates. Its alternatives are one-click buttons that make one the subject.
 - Suggestions run only on a click, per photo. No automatic or bulk generation: it keeps family photos out by default and the cost at zero unless asked.
 - The image sent to the model is made in the browser (1568 px JPEG) from the picked file or the admin preview, so it costs no extra Images transformation and the Worker never reads an original for it.
 - `photos.caption` remains the public caption and holds a copy of the saved caption being shown. A pointer would have meant a join in every public query; the copy keeps public code and the privacy filter untouched.
