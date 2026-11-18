@@ -65,7 +65,7 @@
 
 /* ───────────── Site chrome ───────────── */
 
-/* Small tracked caps for labels: the header's "Gallery", page eyebrows, info panel terms. */
+/* Small tracked caps for labels: page eyebrows, info panel terms. */
 .eyebrow {
   font-family: var(--font-sans);
   font-size: 11px;

@@ -13,6 +13,6 @@ const [categories, siteTitle, defaultSetting, photos] = await Promise.all([
 const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
 ---
 
-<GalleryPage title={siteTitle ?? 'Jaygovind Sahu — Gallery'} categories={categories} photos={photos} defaultLayout={defaultLayout} galleryUrl="/">
+<GalleryPage title={siteTitle ?? 'Jay’s Gallery'} categories={categories} photos={photos} defaultLayout={defaultLayout} galleryUrl="/">
   <h1 class="sr-only">Latest photos</h1>
 </GalleryPage>
