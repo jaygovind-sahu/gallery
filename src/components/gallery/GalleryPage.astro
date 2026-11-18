@@ -3,9 +3,12 @@
  * Shared shell for every public gallery page: Base layout with the layout toggle in the header,
  * an optional title block, then the Gallery island.
  */
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 import type { Category, PublicPhoto } from '../../lib/db';
-import { resolveLayout, type Layout } from '../../lib/gallery';
+import { altText, derivativeDimensions, resolveLayout, type Layout } from '../../lib/gallery';
+import { siteOrigin } from '../../lib/host';
+import { imageUrl } from '../../lib/images';
 import Gallery from './Gallery';
 import LayoutToggle from './LayoutToggle';
 
@@ -17,35 +20,48 @@ interface Props {
   heading?: string;
   /** Permalink pages put the photo title in the h1 and show the category name as an h2. */
   headingTag?: 'h1' | 'h2';
+  /** Small caps line above the heading: the photo count, plus the region on location pages. */
+  eyebrow?: string | null;
+  /** One line of secondary text under the heading (a category's description). */
   subline?: string | null;
   photos: PublicPhoto[];
   defaultLayout: Layout;
   galleryUrl: string;
   initialPhotoId?: string | null;
   contextCategory?: string | null;
-  ogImage?: { url: string; width: number; height: number } | null;
+  /** The photo shared links preview, at 1600 px. Defaults to the first photo on the page. */
+  ogPhoto?: PublicPhoto | null;
 }
 
-const { title, description, categories, activeSlug, heading, headingTag = 'h1', subline, photos, defaultLayout, galleryUrl, initialPhotoId = null, contextCategory = null, ogImage = null } = Astro.props;
+const { title, description, categories, activeSlug, heading, headingTag = 'h1', eyebrow, subline, photos, defaultLayout, galleryUrl, initialPhotoId = null, contextCategory = null, ogPhoto } = Astro.props;
 const initialLayout = resolveLayout(Astro.url.searchParams.get('layout'), null, defaultLayout);
+const preview = ogPhoto === undefined ? (photos[0] ?? null) : ogPhoto;
+const ogImage = preview
+  ? {
+      url: siteOrigin(env.SITE_URL, Astro.url.origin) + imageUrl(preview.id, preview.version, 1600),
+      ...derivativeDimensions(preview.width, preview.height, 1600),
+      alt: altText(preview, contextCategory),
+    }
+  : null;
 ---
 
 <Base title={title} description={description} categories={categories} activeSlug={activeSlug} ogImage={ogImage}>
   <LayoutToggle slot="header-end" client:load fallback={defaultLayout} initial={initialLayout} />
   {
     heading ? (
-      <div class="flex flex-col gap-2.5 pb-9 pt-12">
+      <div class="flex flex-col gap-3 pb-10 pt-14 sm:pb-12 sm:pt-20">
+        {eyebrow && <p class="eyebrow m-0">{eyebrow}</p>}
         {
           headingTag === 'h1' ? (
-            <h1 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">{heading}</h1>
+            <h1 class="m-0 font-serif text-[36px] font-normal leading-[1.1] tracking-[-0.01em] text-ink sm:text-[40px]">{heading}</h1>
           ) : (
-            <h2 class="m-0 font-serif text-4xl font-normal leading-tight text-ink sm:text-[44px]">{heading}</h2>
+            <h2 class="m-0 font-serif text-[36px] font-normal leading-[1.1] tracking-[-0.01em] text-ink sm:text-[40px]">{heading}</h2>
           )
         }
-        {subline && <p class="m-0 text-sm text-ink-muted">{subline}</p>}
+        {subline && <p class="m-0 max-w-[60ch] text-pretty text-[15px] leading-relaxed text-ink-muted">{subline}</p>}
       </div>
     ) : (
-      <div class="pt-6" />
+      <div class="pt-4 sm:pt-6" />
     )
   }
   <slot />

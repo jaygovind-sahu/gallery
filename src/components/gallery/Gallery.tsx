@@ -32,6 +32,14 @@ interface TilePhoto extends Photo {
 /** Breakpoints the server renders the rows/masonry layouts for; the client keeps the matching one. */
 const BREAKPOINTS = [640, 1024, 1440];
 const EAGER = 4;
+/**
+ * Classes for the SSR width bands (the library adds a half-width band below the first breakpoint). They are
+ * styled in global.css, so the library's own inline <style> (which the CSP would block) stays off.
+ */
+const SSR_CLASSES = {
+  container: 'ssr-bands',
+  breakpoints: { 320: 'ssr-band ssr-band--320', 640: 'ssr-band ssr-band--640', 1024: 'ssr-band ssr-band--1024', 1440: 'ssr-band ssr-band--1440' },
+};
 
 const SIZES = { size: 'calc(100vw - 64px)', sizes: [{ viewport: '(max-width: 639px)', size: 'calc(100vw - 32px)' }] };
 
@@ -188,11 +196,11 @@ export default function Gallery({ photos, initialLayout, defaultLayout, galleryU
       {photos.length === 0 ? (
         <p className="pb-16 text-sm text-ink-muted">No photos yet.</p>
       ) : layout === 'rows' ? (
-        <SSR breakpoints={BREAKPOINTS}>
+        <SSR breakpoints={BREAKPOINTS} unstyled classNames={SSR_CLASSES}>
           <RowsPhotoAlbum {...common} targetRowHeight={(w) => (w < 640 ? 180 : 280)} rowConstraints={{ singleRowMaxHeight: 480 }} />
         </SSR>
       ) : layout === 'masonry' ? (
-        <SSR breakpoints={BREAKPOINTS}>
+        <SSR breakpoints={BREAKPOINTS} unstyled classNames={SSR_CLASSES}>
           <MasonryPhotoAlbum {...common} columns={(w) => (w < 640 ? 2 : w < 1024 ? 3 : 4)} />
         </SSR>
       ) : (

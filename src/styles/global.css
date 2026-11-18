@@ -22,6 +22,7 @@
   html {
     color-scheme: dark;
     background-color: var(--color-bg);
+    scrollbar-color: var(--color-divider) var(--color-bg);
   }
 
   body {
@@ -41,6 +42,16 @@
     outline: 2px solid var(--color-ink);
     outline-offset: 2px;
   }
+
+  ::selection {
+    background-color: var(--color-ink);
+    color: var(--color-bg);
+  }
+
+  h1,
+  h2 {
+    text-wrap: balance;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -50,6 +61,66 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* ───────────── Site chrome ───────────── */
+
+/* Small tracked caps for labels: the header's "Gallery", page eyebrows, info panel terms. */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+/* Sticky header: solid at the top of the page; once scrolled, translucent over the photos with a hairline. */
+.site-header {
+  background-color: var(--color-bg);
+  border-bottom: 1px solid transparent;
+  transition:
+    translate 200ms ease,
+    transform 200ms ease,
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+.site-header[data-scrolled] {
+  background-color: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  border-bottom-color: var(--color-divider);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+/* Header category links: muted, ink on hover; the current one in ink with a hairline under it. */
+.nav-link {
+  position: relative;
+  color: var(--color-ink-muted);
+  transition: color 150ms ease;
+}
+.nav-link:hover,
+.nav-link[aria-current='page'] {
+  color: var(--color-ink);
+}
+.nav-link[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 1px;
+  background-color: var(--color-ink);
+}
+
+/* Footer links: muted, ink on hover. */
+.footer-link {
+  color: var(--color-ink-muted);
+  transition: color 150ms ease;
+}
+.footer-link:hover,
+.footer-link[aria-current='page'] {
+  color: var(--color-ink);
 }
 
 /* ───────────── Public gallery ───────────── */
@@ -115,6 +186,36 @@
   color: var(--color-ink-muted);
 }
 
+/* Rows and masonry render one copy per width band on the server; the container query shows the one that fits.
+   After hydration a single band is left (`:only-child`) and shows at any width. These replace the inline
+   <style> react-photo-album would render, which the CSP doesn't allow. Bands match BREAKPOINTS in Gallery.tsx. */
+.ssr-bands {
+  container-type: inline-size;
+}
+.ssr-band:not(:only-child) {
+  display: none;
+}
+@container (max-width: 639px) {
+  .ssr-band--320:not(:only-child) {
+    display: block;
+  }
+}
+@container (min-width: 640px) and (max-width: 1023px) {
+  .ssr-band--640:not(:only-child) {
+    display: block;
+  }
+}
+@container (min-width: 1024px) and (max-width: 1439px) {
+  .ssr-band--1024:not(:only-child) {
+    display: block;
+  }
+}
+@container (min-width: 1440px) {
+  .ssr-band--1440:not(:only-child) {
+    display: block;
+  }
+}
+
 /* Uniform grid: 3:2 tiles, cropped; the full image shows in the lightbox. */
 .tile-grid {
   display: grid;
@@ -140,30 +241,94 @@
   }
 }
 
-/* Lightbox: pure black, our type, info panel as a side panel on desktop and a bottom sheet on phones. */
+/* Lightbox: pure black, our type and thin icons. The container reserves a band at the top for the title
+   bar and toolbar (and gutters for the arrows on desktop), so no control sits on the photo. The library
+   measures the container minus its padding, so the image still fits the space that's left. */
 .lightbox {
   --yarl__color_backdrop: #000;
-  --yarl__color_button: var(--color-ink);
-  --yarl__color_button_active: #fff;
+  --yarl__color_button: var(--color-ink-muted);
+  --yarl__color_button_active: var(--color-ink);
+  --yarl__color_button_disabled: var(--color-divider);
   --yarl__slide_title_color: var(--color-ink);
+  --yarl__icon_size: 22px;
+  --yarl__button_padding: 11px;
+  --yarl__toolbar_padding: 6px 8px;
+  --yarl__navigation_button_padding: 24px 12px;
   font-family: var(--font-sans);
+}
+.lightbox .yarl__container {
+  padding: 56px 0;
 }
 .lightbox .yarl__button {
   filter: none;
+  transition: color 150ms ease;
 }
 .lightbox .yarl__button:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: -2px;
 }
+.lightbox .yarl__navigation_prev .yarl__icon,
+.lightbox .yarl__navigation_next .yarl__icon {
+  width: 28px;
+  height: 28px;
+}
+@media (min-width: 768px) {
+  .lightbox {
+    --yarl__toolbar_padding: 10px 16px;
+  }
+  .lightbox .yarl__container {
+    padding: 64px;
+  }
+}
+
+/* Title and position of the current photo, top left, in the reserved band. */
+.lightbox-titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 152px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.lightbox-titlebar__title,
+.lightbox-titlebar__meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lightbox-titlebar__title {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--color-ink);
+}
+.lightbox-titlebar__meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+  .lightbox-titlebar {
+    right: 280px;
+    height: 64px;
+    padding: 0 24px;
+  }
+}
+
 .info-panel {
   position: fixed;
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   background: var(--color-surface);
   color: var(--color-ink);
-  padding: 20px;
+  padding: 24px;
   transition: transform 220ms ease, visibility 220ms;
   overflow-y: auto;
   /* phone: bottom sheet */
@@ -197,4 +362,21 @@
   .lightbox--info .yarl__container {
     width: calc(100% - 340px);
   }
+}
+
+/* Detail rows in the info panel: a small caps term over its value, hairlines between the groups. */
+.info-panel__details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 18px 0;
+  border-top: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-divider);
+}
+.info-panel__details dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-ink);
 }

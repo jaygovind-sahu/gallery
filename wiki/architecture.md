@@ -4,9 +4,9 @@ One Astro app, deployed as one Cloudflare Worker, serves everything: public page
 
 ## Request flow
 
-1. **[src/middleware.ts](../src/middleware.ts)** runs on every request. Admin paths (`/admin`, `/admin/…`, `/api/admin/…`) must pass the Access JWT check first ([security.md](security.md)). After the handler it adds security headers and, for public HTML, the edge-cache header.
+1. **[src/middleware.ts](../src/middleware.ts)** runs on every request. Admin paths (`/admin`, `/admin/…`, `/api/admin/…`) must pass the Access JWT check first ([security.md](security.md)). After the handler it adds security headers and, for public HTML, the edge-cache header. The Content-Security-Policy itself comes from Astro's `security.csp` in `astro.config.mjs`, on rendered pages only ([security.md](security.md#content-security-policy)).
 2. **Routes** in [src/pages/](../src/pages/):
-   - Public pages (`/`, `/c/:slug`, `/l/:slug`, `/all`, `/p/:id`) are server-rendered `.astro` pages. They read D1 through `db.ts` and hand plain data to React islands ([public-gallery.md](public-gallery.md)).
+   - Public pages (`/`, `/c/:slug`, `/l/:slug`, `/all`, `/p/:id`) are server-rendered `.astro` pages. They read D1 through `db.ts` and hand plain data to React islands ([public-gallery.md](public-gallery.md)). `404.astro` answers unknown URLs and pages that return an empty 404.
    - `/img/:id/v:version/:size` is an endpoint that streams a resized derivative ([images.md](images.md)).
    - `/admin/*` pages are Astro shells around React islands; `/api/admin/*` are JSON endpoints ([admin.md](admin.md)).
 3. **Bindings** come from `import { env, waitUntil } from 'cloudflare:workers'`. `Astro.locals.runtime` does not exist in this adapter version.
@@ -46,7 +46,7 @@ src/
     exif-format.ts      EXIF display formatting ("1/2000 s", "f/6.3")
     order.ts            fractional positions
     slug.ts             slugify
-    host.ts             production hostname check (pure)
+    host.ts             production hostname check, public origin for absolute URLs (pure)
     ai.ts               AI provider calls and settings (Worker only; ai.md)
     ai-pure.ts          prompt, output schema, tidying, blind-comparison tokens (pure)
     captions.ts         tones, saved-caption rules, hashtags (pure)

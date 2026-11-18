@@ -355,14 +355,14 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 - **Direction: minimal dark.** The photos are the only color on the page; chrome is quiet, thin and sparse. Dark only in v1 (no light theme).
 - **Palette** (CSS variables): background `#0f0f10`, raised surfaces `#18181a`, dividers `#2a2a2d`, primary text `#ece9e4` (warm off-white), secondary text `#8f8c87`. No accent color: active states (current category, selected layout icon) use primary text vs. secondary. No gradients, borders or shadows on photos.
 - **Type: serif + sans.** Serif for the site name, page titles and photo titles (Newsreader); sans for menus, locations, EXIF and admin UI (Instrument Sans). Self-host via `@fontsource` so the CSP stays self-only. Sizes: site name 22 px, page title 32–40 px, tile title 15 px, tile location 12 px, EXIF 13 px.
-- **Header**: site name in serif on the left; category links (Birds, Macro, Landscape, Astro, Family, All) and the layout toggle on the right; collapses to a menu on phones. Slim, sticky, hides on scroll down and returns on scroll up.
+- **Header**: site name in serif on the left with a small-caps "Gallery" label; category links (Birds, Macro, Landscape, Astro, Family, All, the current one underlined with a hairline) and the layout toggle on the right; collapses to a menu on phones. Slim, sticky, hides on scroll down and returns on scroll up; once scrolled it turns translucent with a hairline under it.
 - **Home page**: no hero and no intro block — the header, then straight into the latest photos in the gallery layout.
-- **Category page**: serif category name, photo count and the optional one-line description in secondary text, then the gallery.
+- **Category page**: photo count in small caps, serif category name, the optional one-line description in secondary text, then the gallery. Location pages put the region beside the count.
 - **Captions under every tile** in all three layouts: title in serif (15 px, primary) and location in sans (12 px, secondary), each one line, truncated with an ellipsis. Untitled photo → location only. Captions take a fixed height (~44 px) so justified rows stay aligned; the layout height calculation must include it (custom render in `react-photo-album`).
 - **Spacing**: 8 px gutters on phones, 12 px on desktop; page side padding 16 px phone, 32 px desktop; generous space above page titles.
 - **Hover and motion**: tiles lift brightness slightly on hover (no zoom, no movement); images fade in over their ThumbHash in ~200 ms; respect `prefers-reduced-motion`.
-- **Lightbox**: pure black background, image as large as fits; info panel slides in from the right on desktop and as a bottom sheet on phones, with the serif title over sans details.
-- **Footer**: small © Jaygovind Sahu and a link back to jaygovindsahu.com.
+- **Lightbox**: pure black background, image as large as fits below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel slides in from the right on desktop and as a bottom sheet on phones, with the serif title over labelled sans details.
+- **Footer**: above a hairline, the site name, small © Jaygovind Sahu, the category links and a link back to jaygovindsahu.com.
 - **Accessible**: alt text = title, else "&lt;category&gt; photo, &lt;location&gt;, &lt;date&gt;"; text contrast ≥ 4.5:1 on the dark background; visible focus rings; lightbox fully keyboard-operable.
 
 ## Auth & security
@@ -374,7 +374,7 @@ Cloudflare Access keeps everyone but the owner out of the admin, and the Worker 
 - **Local dev**: `DEV_BYPASS_AUTH=1` (only honoured when not on the production hostname) skips the check.
 - **Uploads**: check `Content-Type` against the allowlist, cap the body at 100 MB, and trust only `env.IMAGES.info()` for format and dimensions.
 - **Public surface**: the image route accepts only allowlisted sizes and existing published ids; public pages never expose drafts, GPS, R2 keys or internal fields.
-- **Headers**: a strict CSP (self + the image route; no third-party scripts), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. Admin pages also send `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
+- **Headers**: a strict CSP (self + the image route; no third-party scripts; inline scripts and styles only by hash, style attributes allowed), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, a `Permissions-Policy` that turns off unused features, and HSTS. Admin pages also send `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
 - **SQL**: prepared statements only.
 - **AI providers**: the only outbound calls from the Worker, made from `/api/admin/ai/suggest` with keys held as Worker secrets. See AI suggestions for what is and is not sent. The browser never contacts a provider, so the CSP stays self-only.
 

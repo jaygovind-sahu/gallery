@@ -19,6 +19,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
   - Public functions return `PublicPhoto`, `Category` and `PublicLocation`. Photos are selected through `PUBLIC_PHOTO_SELECT`, which lists every column explicitly, and filtered with `PUBLIC_WHERE` (`status = 'ready' AND published = 1`). A `PublicPhoto` has no GPS, R2 key, status or published flag. **A new column stays private until you deliberately add it to `PUBLIC_PHOTO_SELECT`.**
   - Admin functions (`AdminPhoto`, `AdminCategory`, `Location`, `listCategoryPhotosAdmin`, …) return everything, GPS and R2 keys included. Only admin pages and `/api/admin/*` may call them.
   - `getImageSource` serves the image route only. It holds the R2 key and never leaves the server.
+  - `getPublicCoverPhotoId` returns a category's cover id only when that photo is published and ready; category pages use it for the Open Graph image.
 - **Mapping.** Rows are converted to camelCase objects (`toPublicPhoto`, `toAdminPhoto`, …); 0/1 columns become booleans. Empty strings are stored as `NULL` (`emptyToNull`).
 - **Atomic writes** go through `db().batch([...])`.
 - **Cleanup is explicit.** Deletes clear related rows themselves (covers, memberships, saved captions, `location_id`) rather than relying on foreign-key actions.

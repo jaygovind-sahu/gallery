@@ -33,6 +33,19 @@ The full script list is in [README.md → Local development](../README.md#local-
 - **Don't run `pnpm build` while e2e tests are using the dev server.** It triggers the same re-optimisation.
 - **After editing `wrangler.jsonc`:** run `pnpm cf-typegen`. If `database_id` changed, run `pnpm db:migrate:local` again (local data is keyed by it). Keep the top level and `env.live` in sync.
 
+## Checking the CSP
+
+`astro dev` sends no Content-Security-Policy, so check the built Worker after adding a script, a style, an inline `<style>` from a library, or an external URL ([security.md](security.md#content-security-policy)):
+
+```sh
+pnpm build
+pnpm wrangler dev -c dist/server/wrangler.json --port 8788 --persist-to .wrangler/state --local-upstream localhost:8788
+```
+
+- `--persist-to .wrangler/state` shares the dev server's local D1 and R2, so photos uploaded on :4321 show up.
+- `--local-upstream localhost:8788` keeps the request's hostname local. Without it, wrangler rewrites requests to the route's host, gallery.jaygovindsahu.com, so the auth bypass is refused as it would be on the live site.
+- Open the pages in a browser and watch the console for "Content Security Policy" errors. A Playwright script can listen for `securitypolicyviolation` events instead.
+
 ## Local vs production behaviour
 
 Code tells production from local dev by comparing the request's hostname with `SITE_URL`'s.

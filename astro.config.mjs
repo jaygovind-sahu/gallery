@@ -9,6 +9,27 @@ export default defineConfig({
   output: 'server',
   // No Astro sessions: otherwise the adapter provisions a KV namespace we don't need.
   session: false,
+  // No Markdown pages; Shiki's inline styles would also clash with the CSP below.
+  markdown: { syntaxHighlight: false },
+  security: {
+    // Content-Security-Policy, sent as a header on every rendered page. Scripts and stylesheets come from
+    // this origin only; Astro adds hashes for the inline scripts and styles it renders itself. Style
+    // attributes are allowed because React renders them on the server (tile sizes, ThumbHash backgrounds);
+    // `data:` images are the ThumbHash placeholders and `blob:` the upload previews. No third parties.
+    csp: {
+      directives: [
+        "default-src 'self'",
+        "img-src 'self' data: blob:",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+      ],
+      styleDirective: {
+        resources: ["'self'", { resource: "'unsafe-inline'", kind: 'attribute' }],
+      },
+    },
+  },
   adapter: cloudflare({
     // Photos are resized by our own /img route (Images binding), not by astro:assets.
     imageService: 'passthrough',

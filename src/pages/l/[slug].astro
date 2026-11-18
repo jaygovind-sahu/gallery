@@ -6,7 +6,8 @@ import { isLayout } from '../../lib/gallery';
 
 const slug = Astro.params.slug ?? '';
 const [location, categories, defaultSetting] = await Promise.all([getPublicLocationBySlug(slug), listCategories(), getSetting('default_layout')]);
-if (!location) return new Response('Not found', { status: 404 });
+// An empty 404 renders src/pages/404.astro.
+if (!location) return new Response(null, { status: 404 });
 
 const photos = await listLocationPhotos(location.id);
 const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
@@ -15,9 +16,10 @@ const countLabel = `${location.photoCount} ${location.photoCount === 1 ? 'photo'
 
 <GalleryPage
   title={`${location.name} — Jaygovind Sahu`}
+  description={`Photos from ${location.name}${location.region ? `, ${location.region}` : ''}, by Jaygovind Sahu.`}
   categories={categories}
   heading={location.name}
-  subline={`${countLabel}${location.region ? ` · ${location.region}` : ''}`}
+  eyebrow={location.region ? `${location.region} · ${countLabel}` : countLabel}
   photos={photos}
   defaultLayout={defaultLayout}
   galleryUrl={`/l/${location.slug}`}

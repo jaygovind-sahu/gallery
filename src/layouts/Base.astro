@@ -1,6 +1,8 @@
 ---
+import { env } from 'cloudflare:workers';
 import '../styles/global.css';
 import type { Category } from '../lib/db';
+import { siteOrigin } from '../lib/host';
 
 interface Props {
   title: string;
@@ -8,7 +10,10 @@ interface Props {
   categories: Category[];
   /** Slug of the current category (or "all"), for aria-current in the menu. */
   activeSlug?: string;
-  ogImage?: { url: string; width: number; height: number } | null;
+  /** Absolute URL, pixel size and alt text of the preview image for shared links. */
+  ogImage?: { url: string; width: number; height: number; alt: string } | null;
+  /** False on pages that shouldn't name a canonical URL (the 404 page). */
+  canonical?: boolean;
 }
 
 const {
@@ -17,10 +22,14 @@ const {
   categories,
   activeSlug,
   ogImage = null,
+  canonical = true,
 } = Astro.props;
+
+const pageUrl = siteOrigin(env.SITE_URL, Astro.url.origin) + Astro.url.pathname;
 
 const links = [...categories.map((c) => ({ href: `/c/${c.slug}`, label: c.name, slug: c.slug })), { href: '/all', label: 'All', slug: 'all' }];
 const hasHeaderEnd = Astro.slots.has('header-end');
+const year = new Date().getFullYear();
 ---
 
 <!doctype html>
@@ -32,54 +41,61 @@ const hasHeaderEnd = Astro.slots.has('header-end');
     <meta name="theme-color" content="#0f0f10" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+    {canonical && <link rel="canonical" href={pageUrl} />}
+    <meta property="og:site_name" content="Jaygovind Sahu" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content={Astro.url.origin + Astro.url.pathname} />
+    {canonical && <meta property="og:url" content={pageUrl} />}
     {
-      ogImage && (
+      ogImage ? (
         <>
           <meta property="og:image" content={ogImage.url} />
           <meta property="og:image:width" content={String(ogImage.width)} />
           <meta property="og:image:height" content={String(ogImage.height)} />
+          <meta property="og:image:alt" content={ogImage.alt} />
           <meta name="twitter:card" content="summary_large_image" />
         </>
+      ) : (
+        <meta name="twitter:card" content="summary" />
       )
     }
   </head>
-  <body class="min-h-screen">
-    <header id="site-header" class="sticky top-0 z-10 flex items-center justify-between gap-4 bg-bg px-4 py-4 transition-transform duration-200 sm:px-8 sm:py-5">
-      <a href="/" class="shrink-0 font-serif text-[22px] tracking-[0.01em] text-ink">Jaygovind Sahu</a>
+  <body class="flex min-h-screen flex-col">
+    <header id="site-header" class="site-header sticky top-0 z-10 flex items-center justify-between gap-4 px-4 py-4 sm:px-8 sm:py-5">
+      <a href="/" class="flex shrink-0 items-center gap-3 text-ink">
+        <span class="font-serif text-[22px] leading-none tracking-[0.01em]">Jaygovind Sahu</span>
+        <span class="hidden h-4 w-px bg-divider md:block" aria-hidden="true"></span>
+        <span class="eyebrow hidden md:inline">Gallery</span>
+      </a>
       <div class="flex items-center gap-3 sm:gap-6">
         <nav aria-label="Categories" class="hidden gap-6 text-sm sm:flex">
           {
             links.map((l) => (
-              <a
-                href={l.href}
-                aria-current={l.slug === activeSlug ? 'page' : undefined}
-                class:list={['transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
-              >
+              <a href={l.href} aria-current={l.slug === activeSlug ? 'page' : undefined} class="nav-link">
                 {l.label}
               </a>
             ))
           }
         </nav>
+        {hasHeaderEnd && <span class="hidden h-5 w-px bg-divider sm:block" aria-hidden="true" />}
         {hasHeaderEnd && <slot name="header-end" />}
         <details class="relative sm:hidden">
-          <summary class="flex cursor-pointer list-none items-center rounded p-1.5 text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label="Menu">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path d="M4 7h16M4 12h16M4 17h16" />
+          <summary class="flex cursor-pointer list-none items-center rounded-full p-1.5 text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 8h16M4 16h16" />
             </svg>
           </summary>
-          <nav aria-label="Categories" class="absolute right-0 top-full mt-2 flex min-w-40 flex-col border border-divider bg-bg py-2 text-sm">
+          <nav aria-label="Categories" class="absolute right-0 top-full mt-3 flex min-w-48 flex-col rounded-lg border border-divider bg-surface py-2 text-[15px]">
             {
               links.map((l) => (
                 <a
                   href={l.href}
                   aria-current={l.slug === activeSlug ? 'page' : undefined}
-                  class:list={['px-4 py-2 transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
+                  class:list={['flex items-center justify-between gap-4 px-4 py-2.5 transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
                 >
                   {l.label}
+                  {l.slug === activeSlug && <span class="size-1.5 rounded-full bg-ink" aria-hidden="true" />}
                 </a>
               ))
             }
@@ -88,19 +104,45 @@ const hasHeaderEnd = Astro.slots.has('header-end');
       </div>
     </header>
 
-    <main class="px-4 sm:px-8">
+    <main class="flex-1 px-4 sm:px-8">
       <slot />
     </main>
 
-    <footer class="flex items-center justify-between gap-4 px-4 pb-10 pt-14 text-xs text-ink-muted sm:px-8">
-      <span>© Jaygovind Sahu</span>
-      <a href="https://jaygovindsahu.com" class="hover:text-ink">jaygovindsahu.com</a>
+    <footer class="mt-16 px-4 sm:mt-24 sm:px-8">
+      <div class="flex flex-col gap-6 border-t border-divider pb-10 pt-8 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex flex-col gap-2">
+          <a href="/" class="flex items-center gap-3 text-ink">
+            <span class="font-serif text-lg leading-none">Jaygovind Sahu</span>
+            <span class="h-3.5 w-px bg-divider" aria-hidden="true"></span>
+            <span class="eyebrow">Gallery</span>
+          </a>
+          <p class="m-0 text-xs text-ink-muted">© {year} Jaygovind Sahu</p>
+        </div>
+        <div class="flex flex-col gap-3 text-[13px] sm:items-end">
+          <nav aria-label="Footer" class="flex flex-wrap gap-x-5 gap-y-2">
+            {
+              links.map((l) => (
+                <a href={l.href} aria-current={l.slug === activeSlug ? 'page' : undefined} class="footer-link">
+                  {l.label}
+                </a>
+              ))
+            }
+          </nav>
+          <a href="https://jaygovindsahu.com" class="footer-link inline-flex items-center gap-1">
+            jaygovindsahu.com
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 17L17 7M8 7h9v9" />
+            </svg>
+          </a>
+        </div>
+      </div>
     </footer>
 
     <script>
       // Slim sticky header: hides on scroll down, returns on scroll up.
       const header = document.getElementById('site-header');
       let last = window.scrollY;
+      header?.toggleAttribute('data-scrolled', last > 8);
       let ticking = false;
       window.addEventListener(
         'scroll',
@@ -109,6 +151,7 @@ const hasHeaderEnd = Astro.slots.has('header-end');
           ticking = true;
           requestAnimationFrame(() => {
             const y = window.scrollY;
+            header.toggleAttribute('data-scrolled', y > 8);
             const menuOpen = header.querySelector('details[open]');
             if (y > last && y > 80 && !menuOpen) header.classList.add('-translate-y-full');
             else if (y < last) header.classList.remove('-translate-y-full');
