@@ -13,7 +13,7 @@ const photos = await listCategoryPhotosAdmin(id);
   <div class="flex flex-col gap-1 pb-6">
     <a href="/admin/categories" class="text-xs text-ink-muted hover:text-ink">← Categories</a>
     <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-      <h1 class="m-0 font-serif text-3xl font-normal text-ink">{category.name}</h1>
+      <h1 class="m-0 font-display text-4xl font-medium text-ink">{category.name}</h1>
       <span class="text-sm text-ink-muted">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</span>
       <a href={`/c/${category.slug}`} class="text-sm text-ink-muted hover:text-ink" target="_blank" rel="noreferrer">View on site →</a>
     </div>

@@ -64,7 +64,7 @@ They deter, they don't prevent:
 
 ## Look and feel
 
-- **Tokens:** `@theme` in [src/styles/global.css](../src/styles/global.css) defines `bg`, `surface`, `divider`, `ink`, `ink-muted`, `font-serif` (Newsreader) and `font-sans` (Instrument Sans). Use them through Tailwind (`bg-bg`, `text-ink`, `text-ink-muted`, `border-divider`, `font-serif`), not raw hex values.
+- **Tokens:** `@theme` in [src/styles/global.css](../src/styles/global.css) defines `bg`, `surface`, `divider`, `ink`, `ink-muted`, `font-display` (Barlow Condensed, for titles) and `font-sans` (Barlow, for everything else). Use them through Tailwind (`bg-bg`, `text-ink`, `text-ink-muted`, `border-divider`, `font-display`), not raw hex values. Only weight 500 of Barlow Condensed is loaded, so pair `font-display` with `font-medium`; Barlow has 400 and 500.
 - **Hard rules:**
   - Dark only.
   - No accent color: active states use `ink` against `ink-muted` (the current nav link adds an `ink` hairline; the selected layout button sits on a `divider` pill).

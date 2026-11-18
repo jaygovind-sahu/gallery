@@ -7,6 +7,6 @@ const categories = await listAdminCategories();
 ---
 
 <Admin title="Categories" current="categories">
-  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">Categories</h1>
+  <h1 class="m-0 pb-6 font-display text-4xl font-medium text-ink">Categories</h1>
   <CategoryManager client:load categories={categories} />
 </Admin>

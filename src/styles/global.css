@@ -1,10 +1,9 @@
 @import 'tailwindcss';
 
 /* Self-hosted fonts (CSP stays self-only). */
-@import '@fontsource/newsreader/400.css';
-@import '@fontsource/newsreader/500.css';
-@import '@fontsource/instrument-sans/400.css';
-@import '@fontsource/instrument-sans/500.css';
+@import '@fontsource/barlow-condensed/500.css';
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
 
 /* Design tokens — docs/DESIGN.md, "Look and feel". Dark only in v1. */
 @theme {
@@ -14,8 +13,9 @@
   --color-ink: #ece9e4;
   --color-ink-muted: #8f8c87;
 
-  --font-serif: 'Newsreader', ui-serif, Georgia, serif;
-  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  /* Titles: Barlow Condensed, always at 500 (the only weight loaded). Everything else: Barlow. */
+  --font-display: 'Barlow Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
@@ -157,7 +157,7 @@
   transition: opacity 200ms ease;
 }
 
-/* Captions under every tile: one serif title line, one sans location line, fixed height so rows align. */
+/* Captions under every tile: one display title line, one sans location line, fixed height so rows align. */
 .tile-caption {
   display: flex;
   flex-direction: column;
@@ -174,9 +174,11 @@
   text-overflow: ellipsis;
 }
 .tile-caption__title {
-  font-family: var(--font-serif);
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 17px;
   line-height: 20px;
+  letter-spacing: 0.01em;
   color: var(--color-ink);
 }
 .tile-caption__location {
@@ -301,9 +303,11 @@
   text-overflow: ellipsis;
 }
 .lightbox-titlebar__title {
-  font-family: var(--font-serif);
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 19px;
   line-height: 22px;
+  letter-spacing: 0.01em;
   color: var(--color-ink);
 }
 .lightbox-titlebar__meta {

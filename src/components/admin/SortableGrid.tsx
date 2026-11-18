@@ -107,7 +107,7 @@ function Tile({ photo, index, isCover, onCover }: { photo: CategoryPhotoAdmin; i
       </div>
       <div className="flex items-center gap-1.5 px-0.5 text-xs">
         <span className="w-5 shrink-0 text-ink-muted">{index + 1}</span>
-        <span className="min-w-0 flex-1 truncate font-serif text-[14px] text-ink">{photo.title || 'Untitled'}</span>
+        <span className="min-w-0 flex-1 truncate font-display text-[16px] font-medium text-ink">{photo.title || 'Untitled'}</span>
         {!photo.published && <span className={badge}>Draft</span>}
       </div>
       <div className="flex items-center gap-2 px-0.5 pb-0.5 text-xs">

@@ -20,7 +20,7 @@ export default function InfoPanel({ photo, open, onClose }: Props) {
       className="info-panel"
     >
       <div className="flex items-start justify-between gap-4">
-        <h2 className="m-0 font-serif text-[26px] font-normal leading-tight text-ink">{photo.title?.trim() || 'Untitled'}</h2>
+        <h2 className="m-0 font-display text-[30px] font-medium leading-tight text-ink">{photo.title?.trim() || 'Untitled'}</h2>
         <button type="button" onClick={onClose} aria-label="Hide details" className="-mr-1 -mt-1 p-1 text-ink-muted hover:text-ink">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" />

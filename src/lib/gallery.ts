@@ -84,7 +84,7 @@ export function placeholderDataUrl(base64: string | null | undefined): string | 
   }
 }
 
-/** Caption lines under a tile: title (serif) and location (sans); untitled photos show the location only. */
+/** Caption lines under a tile: title (display face) and location (sans); untitled photos show the location only. */
 export function tileCaption(photo: Pick<PublicPhoto, 'title' | 'location'>): { title: string | null; location: string | null } {
   return { title: photo.title?.trim() || null, location: photo.location?.name ?? null };
 }

@@ -8,7 +8,7 @@ const [categories, locations, centroids] = await Promise.all([listCategories(), 
 ---
 
 <Admin title="Upload" current="upload">
-  <h1 class="m-0 pb-6 font-serif text-3xl font-normal text-ink">Upload</h1>
+  <h1 class="m-0 pb-6 font-display text-4xl font-medium text-ink">Upload</h1>
   <UploadQueue
     client:load
     categories={categories.map((c) => ({ id: c.id, name: c.name }))}
