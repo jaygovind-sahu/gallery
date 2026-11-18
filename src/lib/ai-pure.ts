@@ -16,10 +16,15 @@ export type Provider = (typeof PROVIDERS)[number];
 
 export const PROVIDER_LABELS: Record<Provider, string> = { anthropic: 'Claude', openai: 'GPT' };
 
-/** What the model is asked to return. Every field is required so both providers' strict modes accept it. */
+/**
+ * What the model is asked to return. Every field is required so both providers' strict modes accept it.
+ * Field order matters: models write fields in order, so `fieldMarks` comes before the name to make the
+ * model look at the evidence before it commits to one.
+ */
 export const modelOutputSchema = z.object({
   subject: z.object({
     present: z.boolean(),
+    fieldMarks: z.string(),
     commonName: z.string(),
     scientificName: z.string(),
     confidence: z.enum(['high', 'medium', 'low']),
@@ -41,9 +46,10 @@ export const MODEL_OUTPUT_JSON_SCHEMA = {
     subject: {
       type: 'object',
       additionalProperties: false,
-      required: ['present', 'commonName', 'scientificName', 'confidence', 'alternatives'],
+      required: ['present', 'fieldMarks', 'commonName', 'scientificName', 'confidence', 'alternatives'],
       properties: {
         present: { type: 'boolean' },
+        fieldMarks: { type: 'string' },
         commonName: { type: 'string' },
         scientificName: { type: 'string' },
         confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
@@ -65,12 +71,14 @@ export const MODEL_OUTPUT_JSON_SCHEMA = {
 /** What the admin UI gets back. */
 export interface Suggestion {
   subject: {
-    /** Null when the photo has no bird, animal or insect as its subject. */
+    /** Null when the photo has no bird, animal, insect or plant as its subject. */
     name: string | null;
     scientificName: string | null;
     /** `given` = the owner typed it, so nothing was guessed. */
     confidence: 'given' | 'high' | 'medium' | 'low';
     alternatives: string[];
+    /** What the model went by for a guessed name ("streaked flanks, red only on the head and breast"). */
+    fieldMarks: string | null;
   };
   titles: string[];
   captions: Record<AiTone, string>;
@@ -122,7 +130,7 @@ export function monthAndYear(takenAt: string | null | undefined): string | null 
   return month ? `${month} ${m[1]}` : null;
 }
 
-export const SYSTEM_PROMPT = `You write the words that go with one photograph in a photographer's online portfolio. They shoot birds, insects and other macro subjects, landscapes, night skies and family. You will be shown the photo and what is known about it, and you return titles, captions in three tones, and hashtags.
+export const SYSTEM_PROMPT = `You write the words that go with one photograph in a photographer's online portfolio. They shoot birds, insects, flowers and other macro subjects, landscapes, night skies and family. You will be shown the photo and what is known about it, and you return titles, captions in three tones, and hashtags.
 
 Where each piece is used, so you can judge length and content:
 - Title: shown on one line under the photo's thumbnail and used as its alt text. It is a label, 2 to 6 words and at most about 40 characters, in title case, with no closing punctuation. Offer three that differ in angle rather than in wording.
@@ -135,10 +143,13 @@ The three caption tones:
 - playful: light and witty, as if the photographer were smiling while writing it. Gentle, never mocking the subject.
 
 Naming the subject:
-- When the photo's subject is a bird, another animal or an insect, its name belongs in every title and every caption. This is the one firm rule; visitors come to this portfolio to learn what they are looking at.
+- When the photo's subject is a living thing (a bird or another animal, an insect, or a plant such as a flower, tree or fungus), its name belongs in every title and every caption. This is the one firm rule; visitors come to this portfolio to learn what they are looking at.
 - If the photographer has given the subject, that name is correct. The photographer was there and often confirmed it with a field guide. Use it exactly, set "present" to true and "confidence" to "high", and do not offer alternatives.
-- If the subject is not given, name it only as precisely as the photo and the place and month allow. Identifying a species from one photo is unreliable, and a confident wrong name published under the photographer's name is worse than a cautious right one. When you are sure of the family but not the species, use the broader name ("a sparrow", "a skipper butterfly") in the writing, put that in "commonName", set "confidence" to "medium" or "low", and list the likely species in "alternatives". Leave "scientificName" empty unless you are confident of the species.
-- If the photo's subject is not a creature (a landscape, the night sky, people), set "present" to false and leave the names empty.
+- If the subject is not given, identify it the way a birder or naturalist would. First find the features that tell it apart from similar species (for a bird: bill shape, where the colour sits, streaking, wing bars, face markings; for an insect: wing pattern and markings; for a plant: flower shape and colour, how the flowers are arranged, the leaves), and write them in "fieldMarks" as a short phrase, such as "streaked brown flanks, red only on the head and breast". Then weigh them against the place and month.
+- When those features point to one species, name the species, not only its group: "House Finch", not "a finch". A clear, close photo of a common species can usually be named. Set "confidence" to "high" when the features settle it, or "medium" when one species is most likely but another is still possible, and list those others in "alternatives". Give the species' scientific name.
+- Only when the photo cannot tell the likely species apart (the deciding features are hidden, too small or too blurred) use the broader name in "commonName" and in the writing ("a sparrow", "a skipper butterfly", "an orchid"), set "confidence" to "low", list the likely species in "alternatives", and leave "scientificName" empty. A wrong species name published under the photographer's name is worse than a broader right one, but stopping at the group when the features are plain to see is not caution, it is a missed identification.
+- When the plumage or markings clearly show the sex or age, say so in the titles and captions ("a male House Finch"), and keep "commonName" to the species.
+- If the photo's subject is not a living thing (a landscape, the night sky, people), set "present" to false and leave the names and "fieldMarks" empty. When the photographer gave the subject, leave "fieldMarks" empty too.
 
 Write only what the photo and the notes support. Do not invent a location, a time of day, a behaviour or a story that is not visible or given. People in family photos are never named or described by appearance; write about the moment instead.
 
@@ -181,6 +192,7 @@ export function toSuggestion(raw: ModelOutput, ctx: Pick<SuggestContext, 'subjec
       scientificName: (given ?? guessed) ? raw.subject.scientificName.trim() || null : null,
       confidence: given ? 'given' : raw.subject.confidence,
       alternatives: given ? [] : uniqueStrings(raw.subject.alternatives.map((a) => a.trim())).slice(0, 4),
+      fieldMarks: given || !guessed ? null : raw.subject.fieldMarks.replace(/\s+/g, ' ').trim().replace(/\.+$/, '').slice(0, 200) || null,
     },
     titles,
     captions: {

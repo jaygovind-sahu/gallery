@@ -128,7 +128,7 @@ test('edit page: an AI guess is flagged, edited captions survive a re-run, and o
 
   // No subject was given, so the name is a guess and says so.
   await expect(page.getByLabel('Subject', { exact: true })).toHaveValue('Great Blue Heron');
-  await expect(page.getByRole('note').filter({ hasText: 'AI guess' })).toContainText('AI guess, medium confidence (Ardea herodias). Could also be: Great Egret.');
+  await expect(page.getByRole('note').filter({ hasText: 'AI guess' })).toContainText('AI guess, medium confidence (Ardea herodias). Going by: grey-blue body, black stripe over the eye, long neck. Could also be: Great Egret.');
   await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Great Blue Heron, Waiting (A)');
 
   // Running it again must not feed the guess back as if the owner had typed it: it stays a guess.
@@ -176,6 +176,25 @@ test('edit page: an AI guess is flagged, edited captions survive a re-run, and o
   await expect.poll(async () => (await getPhoto(request, id)).caption).toBe('[A] This great blue heron has been pretending to be a stick all morning.');
   photo = await getPhoto(request, id);
   expect(photo.captions).toHaveLength(3);
+});
+
+test('edit page: picking one of the AI’s alternatives makes it the subject, and the next Suggest writes around it', async ({ page, request }) => {
+  const id = await createPhoto(request, { title: null, categoryIds: [BIRDS] });
+  created.push(id);
+
+  await open(page, `/admin/photos/${id}`);
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByLabel('Subject', { exact: true })).toHaveValue('Great Blue Heron');
+
+  await page.getByRole('note').getByRole('button', { name: 'Great Egret' }).click();
+  await expect(page.getByLabel('Subject', { exact: true })).toHaveValue('Great Egret');
+  await expect(page.getByRole('note').filter({ hasText: 'AI guess' })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Subject set to Great Egret' })).toBeVisible();
+
+  // Now the owner's word: the stand-in echoes a given subject back, so the captions name it.
+  await page.getByRole('button', { name: 'Suggest', exact: true }).click();
+  await expect(page.getByLabel('Field notes version')).toHaveValue('[A] A great egret stands motionless at the marsh.');
+  await expect(page.getByRole('note').filter({ hasText: 'AI guess' })).toHaveCount(0);
 });
 
 test('blind comparison: two unlabeled sets, and the pick is counted', async ({ page, request }) => {

@@ -283,7 +283,7 @@ Tones: **field notes** (plain, observational), **poetic** (quiet, reflective), *
 **Rules**
 
 - A photo is sent to a model only when the owner clicks Suggest for that photo. No automatic or bulk generation; family photos stay out unless asked for.
-- If the photo's subject is a bird, another animal or an insect, its name goes in every title and caption.
+- If the photo's subject is a bird, another animal, an insect or a plant (a flower, tree or fungus), its name goes in every title and caption.
 - The subject is an input. General models are unreliable at species-level identification, so the owner types the subject when it is known and the model writes around it. If it is left blank the model may name the subject as far as it is sure; the admin shows that name as a guess, with its confidence and alternatives, to be checked before publishing.
 - The model is given the location's name and region, the month and year, the categories, the gear and any Lightroom keywords. It is never given GPS coordinates, the exact date or time, or the original file: the browser sends a 1568 px JPEG copy.
 - One request returns everything (all tones, titles, hashtags), using each provider's structured-output mode.
@@ -297,7 +297,7 @@ Tones: **field notes** (plain, observational), **poetic** (quiet, reflective), *
 
 **Providers**
 
-- Anthropic (Claude Haiku) and OpenAI (GPT mini), the cheapest tier of each: with the subject supplied, what separates models is writing style. API keys are Worker secrets; the model names are vars. The provider is one swappable function.
+- Anthropic (Claude Sonnet) and OpenAI (GPT mini). Claude runs on Sonnet rather than its cheapest tier because it is better at naming the subject when the owner leaves it blank; with the subject supplied, what separates models is writing style. API keys are Worker secrets; the model names are vars. The provider is one swappable function.
 - **Blind comparison:** with both keys set and the option on, each Suggest runs both models and shows two unlabeled sets in random order. The owner's pick is recorded in `ai_votes`; `/admin/ai` reveals the tally on request, and the owner then sets the provider.
 - The owner's notes on voice (example captions, words to avoid) are stored in `settings` and sent with every request.
 - Without a key the Suggest button is hidden and everything else works as before.
