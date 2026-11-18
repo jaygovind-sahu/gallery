@@ -13,7 +13,7 @@ import {
   type ModelOutput,
 } from '../../src/lib/ai-pure';
 import { distanceKm, nearestLocation } from '../../src/lib/geo';
-import { isProductionHost, productionHostname } from '../../src/lib/host';
+import { isProductionHost, productionHostname, siteOrigin } from '../../src/lib/host';
 
 const categories = [
   { id: 'c-birds', name: 'Birds' },
@@ -160,5 +160,11 @@ describe('production hostname', () => {
   it('dev-only switches (auth bypass, AI mock) are refused on it and allowed elsewhere', () => {
     expect(isProductionHost('gallery.jaygovindsahu.com', 'https://gallery.jaygovindsahu.com')).toBe(true);
     expect(isProductionHost('localhost', 'https://gallery.jaygovindsahu.com')).toBe(false);
+  });
+
+  it('absolute URLs (canonical, Open Graph) use SITE_URL’s origin, else the request’s', () => {
+    expect(siteOrigin('https://gallery.jaygovindsahu.com/', 'http://localhost:4321')).toBe('https://gallery.jaygovindsahu.com');
+    expect(siteOrigin(undefined, 'http://localhost:4321')).toBe('http://localhost:4321');
+    expect(siteOrigin('not a url', 'http://localhost:4321')).toBe('http://localhost:4321');
   });
 });

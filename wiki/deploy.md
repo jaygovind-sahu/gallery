@@ -53,6 +53,16 @@ GitHub holds the deploy credentials and, optionally, the Worker's own secrets. K
 
 If the deploy step fails with an authentication or permission error on the custom domain, add **DNS Write** to the token's Zone policy. You can change a token's permissions without changing its value.
 
+## Checks after a deploy that changes headers or pages
+
+Scripts can't load the live pages (bot challenge, below), so the owner checks these in a normal browser. They were first run for milestone 7.
+
+1. **No CSP errors.** Open DevTools → Console on the home page, a category, a photo (lightbox and info panel), a location, `/admin`, `/admin/upload` (pick a file) and `/admin/ai`. There should be no "Content Security Policy" errors.
+   - Cloudflare can inject its own inline scripts into pages: bot detection (JavaScript detections), Web Analytics, Rocket Loader, Email Address Obfuscation. The CSP blocks them, and they show up here as blocked inline scripts or `/cdn-cgi/` URLs. Turn the feature off for this hostname, or allow it in the CSP on purpose; don't add `'unsafe-inline'`.
+2. **Headers.** DevTools → Network → the document request: `content-security-policy`, `strict-transport-security`, `x-frame-options`, `permissions-policy` are present.
+3. **404.** A made-up address such as `/c/nothing` shows the "Nothing here" page.
+4. **Link previews.** Paste a category link and a photo link into a chat app. Each should preview with a photo (the category's cover, or the photo itself). No preview at all usually means the bot challenge is stopping the app's crawler: allow verified bots in the zone's security settings.
+
 ## Debugging production
 
 - **Bot challenge:** curl and headless clients get a 403 with `cf-mitigated: challenge` on every Worker route; only static files (e.g. `/watermark.png`) get through. Don't try to probe pages or `/img` from scripts.

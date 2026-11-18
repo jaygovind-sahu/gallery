@@ -53,8 +53,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Immutable responses (e.g. redirects built by Astro) can't take headers; copy them if so.
   const headers = new Headers(response.headers);
+  // Security headers on every response. The Content-Security-Policy comes from Astro (astro.config.mjs,
+  // `security.csp`) on rendered pages, where it can hash Astro's own inline scripts.
   headers.set('x-content-type-options', 'nosniff');
   headers.set('referrer-policy', 'strict-origin-when-cross-origin');
+  headers.set('x-frame-options', 'DENY');
+  headers.set('cross-origin-opener-policy', 'same-origin');
+  headers.set('permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
+  if (url.protocol === 'https:') headers.set('strict-transport-security', 'max-age=31536000');
   if (admin) {
     headers.set('cache-control', 'no-store');
     headers.set('x-robots-tag', 'noindex');

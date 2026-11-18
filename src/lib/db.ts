@@ -72,6 +72,18 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
   return row ? toCategory(row) : null;
 }
 
+/** The category's cover photo id, only if that photo is published and ready (a cover can point at a draft). */
+export async function getPublicCoverPhotoId(categoryId: string): Promise<string | null> {
+  const row = await db()
+    .prepare(
+      `SELECT p.id FROM categories c JOIN photos p ON p.id = c.cover_photo_id
+        WHERE c.id = ? AND p.status = 'ready' AND p.published = 1`,
+    )
+    .bind(categoryId)
+    .first<{ id: string }>();
+  return row?.id ?? null;
+}
+
 /** Key/value settings such as site_title and watermark_text. */
 export async function getSetting(key: string): Promise<string | null> {
   const row = await db().prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string }>();

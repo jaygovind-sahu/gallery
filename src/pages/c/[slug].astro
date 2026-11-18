@@ -1,13 +1,15 @@
 ---
 // One category in its manual order, in the owner's default layout for it.
 import GalleryPage from '../../components/gallery/GalleryPage.astro';
-import { getCategoryBySlug, listCategories, listCategoryPhotos } from '../../lib/db';
+import { getCategoryBySlug, getPublicCoverPhotoId, listCategories, listCategoryPhotos } from '../../lib/db';
 
 const slug = Astro.params.slug ?? '';
 const [category, categories] = await Promise.all([getCategoryBySlug(slug), listCategories()]);
-if (!category) return new Response('Not found', { status: 404 });
+// An empty 404 renders src/pages/404.astro.
+if (!category) return new Response(null, { status: 404 });
 
-const photos = await listCategoryPhotos(category.id);
+const [photos, coverId] = await Promise.all([listCategoryPhotos(category.id), getPublicCoverPhotoId(category.id)]);
+// Shared links preview the cover the owner chose, else the first photo.
 const countLabel = `${category.photoCount} ${category.photoCount === 1 ? 'photo' : 'photos'}`;
 ---
 
@@ -17,9 +19,11 @@ const countLabel = `${category.photoCount} ${category.photoCount === 1 ? 'photo'
   categories={categories}
   activeSlug={category.slug}
   heading={category.name}
-  subline={`${countLabel}${category.description ? ` · ${category.description}` : ''}`}
+  eyebrow={countLabel}
+  subline={category.description}
   photos={photos}
   defaultLayout={category.defaultLayout}
   galleryUrl={`/c/${category.slug}`}
   contextCategory={category.name}
+  ogPhoto={photos.find((p) => p.id === coverId) ?? photos[0] ?? null}
 />

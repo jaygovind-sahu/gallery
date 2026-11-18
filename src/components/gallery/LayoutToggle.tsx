@@ -10,10 +10,24 @@ interface Props {
 
 const LABELS: Record<Layout, string> = { rows: 'Rows', masonry: 'Masonry', grid: 'Grid' };
 
-const ICONS: Record<Layout, string> = {
-  rows: 'M3 5h18v5H3zM3 14h18v5H3z',
-  masonry: 'M3 3h8v10H3zM13 3h8v6h-8zM13 11h8v10h-8zM3 15h8v6H3z',
-  grid: 'M3 3h5v5H3zM10 3h4v5h-4zM16 3h5v5h-5zM3 10h5v4H3zM10 10h4v4h-4zM16 10h5v4h-5zM3 16h5v5H3zM10 16h4v5h-4zM16 16h5v5h-5z',
+/** Outline glyphs on a 24 px grid, drawn as rounded rectangles: [x, y, width, height]. */
+const ICONS: Record<Layout, [number, number, number, number][]> = {
+  rows: [
+    [3.75, 5, 16.5, 5.5],
+    [3.75, 13.5, 16.5, 5.5],
+  ],
+  masonry: [
+    [3.75, 3.75, 7, 9.5],
+    [13.25, 3.75, 7, 5.5],
+    [13.25, 11.75, 7, 8.5],
+    [3.75, 15.75, 7, 4.5],
+  ],
+  grid: [
+    [3.75, 3.75, 7, 7],
+    [13.25, 3.75, 7, 7],
+    [3.75, 13.25, 7, 7],
+    [13.25, 13.25, 7, 7],
+  ],
 };
 
 /**
@@ -58,7 +72,7 @@ export default function LayoutToggle({ fallback, initial }: Props) {
   };
 
   return (
-    <div role="group" aria-label="Layout" className="flex items-center gap-0.5">
+    <div role="group" aria-label="Layout" className="flex items-center gap-0.5 rounded-full border border-divider p-[3px]">
       {LAYOUTS.map((l) => (
         <button
           key={l}
@@ -67,10 +81,12 @@ export default function LayoutToggle({ fallback, initial }: Props) {
           title={LABELS[l]}
           aria-pressed={l === layout}
           onClick={() => choose(l)}
-          className={`rounded p-1.5 transition-colors hover:text-ink ${l === layout ? 'text-ink' : 'text-ink-muted'}`}
+          className={`rounded-full p-[5px] transition-colors ${l === layout ? 'bg-divider text-ink' : 'text-ink-muted hover:text-ink'}`}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d={ICONS[l]} />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+            {ICONS[l].map(([x, y, w, h]) => (
+              <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} rx="1.25" />
+            ))}
           </svg>
         </button>
       ))}

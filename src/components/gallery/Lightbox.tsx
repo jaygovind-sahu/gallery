@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import YARL, { useLightboxState } from 'yet-another-react-lightbox';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -23,21 +23,78 @@ interface Props {
   contextCategory?: string | null;
 }
 
-/** Toolbar button plus the panel itself; lives inside the lightbox so it can read the current slide. */
-function InfoControls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const { currentSlide } = useLightboxState();
+/** A thin outline icon in the lightbox's icon slot; `yarl__icon` gives it the toolbar's size. */
+function icon(children: ReactNode) {
+  return () => (
+    <svg className="yarl__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+const ICONS = {
+  iconPrev: icon(<path d="M15 5l-7 7 7 7" />),
+  iconNext: icon(<path d="M9 5l7 7-7 7" />),
+  iconClose: icon(<path d="M6 6l12 12M18 6L6 18" />),
+  iconZoomIn: icon(
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5L20 20M10.5 8v5M8 10.5h5" />
+    </>,
+  ),
+  iconZoomOut: icon(
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5L20 20M8 10.5h5" />
+    </>,
+  ),
+  iconEnterFullscreen: icon(<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />),
+  iconExitFullscreen: icon(<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />),
+};
+const InfoIcon = icon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5.5M12 7.75v.01" />
+  </>,
+);
+
+/** True on touch-first devices, where swipe and pinch replace the arrow and zoom buttons. */
+function useTouchFirst(): boolean {
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(hover: none) and (pointer: coarse)');
+    const update = () => setTouch(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return touch;
+}
+
+/** Title, location and position of the current photo, in the band above it; plus the info panel. */
+function Controls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const { currentSlide, currentIndex, slides } = useLightboxState();
   const photo = currentSlide?.photo;
   if (!photo) return null;
-  return <InfoPanel photo={photo} open={open} onClose={onToggle} />;
+  const title = photo.title?.trim() || null;
+  const location = photo.location?.name ?? null;
+  const position = `${currentIndex + 1} / ${slides.length}`;
+  return (
+    <>
+      <div className="lightbox-titlebar">
+        <span className="lightbox-titlebar__title">{title ?? location ?? 'Untitled'}</span>
+        <span className="lightbox-titlebar__meta">{title && location ? `${location} · ${position}` : position}</span>
+      </div>
+      <InfoPanel photo={photo} open={open} onClose={onToggle} />
+    </>
+  );
 }
 
 function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const label = open ? 'Hide details' : 'Show details';
   return (
     <button type="button" className="yarl__button" aria-label={label} title={label} aria-pressed={open} aria-controls="lightbox-info" onClick={onToggle}>
-      <svg className="yarl__icon" viewBox="0 0 24 24" width="32" height="32" fill="currentColor" aria-hidden="true">
-        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm-1-9h2v6h-2v-6Zm0-4h2v2h-2V7Z" />
-      </svg>
+      <InfoIcon />
     </button>
   );
 }
@@ -48,6 +105,8 @@ function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void })
  */
 export default function Lightbox({ photos, index, open, onClose, onView, contextCategory }: Props) {
   const [info, setInfo] = useState(false);
+  const touchFirst = useTouchFirst();
+  const hidden = () => null;
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +148,12 @@ export default function Lightbox({ photos, index, open, onClose, onView, context
       styles={{ container: { backgroundColor: '#000' } }}
       className={info ? 'lightbox lightbox--info' : 'lightbox'}
       toolbar={{ buttons: [<InfoButton key="info" open={info} onToggle={() => setInfo((v) => !v)} />, 'fullscreen', 'close'] }}
-      render={{ controls: () => <InfoControls open={info} onToggle={() => setInfo((v) => !v)} /> }}
+      render={{
+        ...ICONS,
+        controls: () => <Controls open={info} onToggle={() => setInfo((v) => !v)} />,
+        // Touch-first screens swipe and pinch instead of tapping buttons that sit over the photo.
+        ...(touchFirst ? { buttonPrev: hidden, buttonNext: hidden, buttonZoom: hidden } : {}),
+      }}
     />
   );
 }

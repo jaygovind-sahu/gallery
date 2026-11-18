@@ -6,6 +6,11 @@
 import { z } from 'zod';
 import { AI_TONES, cleanCaptionText, parseHashtags, type AiTone } from './captions';
 
+// This module also runs in the browser (admin islands). Without `jitless`, zod probes `new Function` on first
+// use, which the CSP blocks and reports as a violation even though zod catches it. In the Worker the probe is
+// already skipped, so this changes nothing there.
+z.config({ jitless: true });
+
 export const PROVIDERS = ['anthropic', 'openai'] as const;
 export type Provider = (typeof PROVIDERS)[number];
 

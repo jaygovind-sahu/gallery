@@ -193,5 +193,45 @@ test.describe('public gallery', () => {
     expect((await request.get(`/img/${c}/v1/1600`)).status()).toBe(404);
     await open(page, '/c/birds');
     await expect(tile(page, c)).toHaveCount(0);
+    // The page is the 404 page, worded the same as for an id that never existed.
+    const res = await page.goto(`/p/${c}`);
+    expect(res?.status()).toBe(404);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Nothing here');
+  });
+
+  test('unknown pages get the 404 page; public pages send the security headers', async ({ page, request }) => {
+    for (const url of ['/no-such-page', '/c/no-such-category', '/l/no-such-place', '/p/not-an-id']) {
+      const res = await page.goto(url);
+      expect(res?.status(), url).toBe(404);
+      await expect(page.getByRole('heading', { level: 1 }), url).toHaveText('Nothing here');
+      await expect(page.locator('link[rel="canonical"]'), url).toHaveCount(0);
+    }
+    const headers = (await request.get('/')).headers();
+    expect(headers['x-content-type-options']).toBe('nosniff');
+    expect(headers['x-frame-options']).toBe('DENY');
+    expect(headers['cross-origin-opener-policy']).toBe('same-origin');
+    expect(headers['permissions-policy']).toContain('camera=()');
+  });
+
+  test('a category previews its cover in shared links, never a draft', async ({ page, request }) => {
+    const draft = await createPhoto(request, `gallery-d-${Date.now().toString(36)}`, { published: false });
+    ids.push(draft);
+    const cover = async (coverPhotoId: string | null) =>
+      expect((await request.patch(`/api/admin/categories/${BIRDS}`, { data: { coverPhotoId } })).ok()).toBeTruthy();
+    const ogImage = page.locator('meta[property="og:image"]');
+    try {
+      await cover(b);
+      await page.goto('/c/birds');
+      await expect(ogImage).toHaveAttribute('content', new RegExp(`/img/${b}/v1/1600$`));
+      await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute('content', /Marsh Creek State Park/);
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/c\/birds$/);
+
+      await cover(draft);
+      await page.goto('/c/birds');
+      await expect(ogImage).toHaveAttribute('content', /\/img\/[0-9A-Z]{26}\/v\d+\/1600$/);
+      expect(await page.content()).not.toContain(draft);
+    } finally {
+      await cover(null);
+    }
   });
 });
