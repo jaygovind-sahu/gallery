@@ -44,7 +44,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
 
 ## Migrations
 
-- A schema change is a **new** numbered file: `migrations/0004_<what>.sql`. Never edit an applied migration; 0001 to 0003 are applied locally and in production.
+- A schema change is a **new** numbered file: `migrations/0004_<what>.sql`. Never edit an applied migration; 0001 to 0003 are applied locally and in production. A data change that production needs (like `0004_site_title.sql`, which renames the site) goes the same way.
 - Apply locally with `pnpm db:migrate:local`. `pnpm db:migrate:remote` changes production, so ask the owner first ([deploy.md](deploy.md)).
 - The Deploy workflow applies new migrations to production on every push to `main`, before deploying the code. Merging a migration to `main` applies it.
 - Local D1 data is keyed by `database_id`. If the id in `wrangler.jsonc` changes, migrate again.

@@ -166,7 +166,7 @@ CREATE TABLE ai_votes (                           -- one row per settled blind c
 
 - Categories, in this order: Birds (`birds`), Macro (`macro`), Landscape (`landscape`), Astro (`astro`), Family (`family`). Default layout `rows`.
 - Locations: Bombay Hook NWR (Delaware); Marsh Creek State Park, Struble Trail, Stroud Preserve, ChesLen Preserve, Hibernia County Park (all Pennsylvania). More are added from the admin.
-- Settings: `watermark_text` = `© Jaygovind Sahu`, `site_title` = `Jaygovind Sahu — Gallery`, `default_layout` = `rows`.
+- Settings: `watermark_text` = `© Jaygovind Sahu`, `site_title` = `Jaygovind Sahu — Gallery` (changed to `Jay’s Gallery` by `0004_site_title.sql`), `default_layout` = `rows`.
 
 **Rules**
 
