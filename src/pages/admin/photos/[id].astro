@@ -14,7 +14,7 @@ const heading = photo.title || photo.originalFilename || 'Untitled';
 <Admin title={heading} current="library">
   <div class="flex flex-col gap-1 pb-6">
     <a href="/admin" class="text-xs text-ink-muted hover:text-ink">← Library</a>
-    <h1 class="m-0 truncate font-serif text-3xl font-normal text-ink">{heading}</h1>
+    <h1 class="m-0 truncate font-display text-4xl font-medium text-ink">{heading}</h1>
   </div>
   <PhotoForm
     client:load

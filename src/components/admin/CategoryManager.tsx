@@ -150,7 +150,7 @@ function Row({
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="flex flex-col gap-1">
           <span className={label}>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={`${input} font-serif text-base`} />
+          <input value={name} onChange={(e) => setName(e.target.value)} className={`${input} font-display text-lg font-medium`} />
         </label>
         <label className="flex flex-col gap-1">
           <span className={label}>Slug</span>

@@ -175,7 +175,7 @@ export default function Library({ photos: initial, categories, locations, filter
                   )}
                 </a>
                 <div className="flex min-w-0 items-center gap-1.5 px-0.5">
-                  <a href={`/admin/photos/${p.id}`} className="min-w-0 flex-1 truncate font-serif text-[15px] text-ink" title={p.title ?? p.originalFilename ?? undefined}>
+                  <a href={`/admin/photos/${p.id}`} className="min-w-0 flex-1 truncate font-display text-[17px] font-medium text-ink" title={p.title ?? p.originalFilename ?? undefined}>
                     {p.title || p.originalFilename || 'Untitled'}
                   </a>
                   {p.status === 'uploading' ? <span className={badge}>{stuck ? 'Stuck' : 'Uploading'}</span> : !p.published ? <span className={badge}>Draft</span> : null}

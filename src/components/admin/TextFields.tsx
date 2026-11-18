@@ -187,7 +187,7 @@ export default function TextFields({ value, onChange, disabled = false, aiEnable
           onChange={(e) => set({ title: e.target.value })}
           placeholder={compact ? 'Title' : undefined}
           disabled={disabled}
-          className={`${input} font-serif ${compact ? 'text-[15px]' : 'text-base'}`}
+          className={`${input} font-display font-medium ${compact ? 'text-[17px]' : 'text-lg'}`}
           aria-label="Title"
         />
         {titleOptions.length > 0 && (
@@ -199,7 +199,7 @@ export default function TextFields({ value, onChange, disabled = false, aiEnable
                 disabled={disabled}
                 onClick={() => set({ title: t })}
                 aria-pressed={value.title === t}
-                className={`rounded-full border px-2.5 py-0.5 text-left font-serif text-[13px] transition-colors ${value.title === t ? 'border-ink text-ink' : 'border-divider text-ink-muted hover:border-ink-muted'}`}
+                className={`rounded-full border px-2.5 py-0.5 text-left font-display text-[15px] font-medium transition-colors ${value.title === t ? 'border-ink text-ink' : 'border-divider text-ink-muted hover:border-ink-muted'}`}
               >
                 {t}
               </button>
@@ -396,7 +396,7 @@ function SetCard({ title, suggestion, onUse }: { title: string; suggestion: Sugg
           Sees: {suggestion.subject.name} ({suggestion.subject.confidence} confidence)
         </p>
       )}
-      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-serif text-[15px] text-ink">
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 font-display text-[17px] font-medium text-ink">
         {suggestion.titles.map((t) => (
           <li key={t}>{t}</li>
         ))}

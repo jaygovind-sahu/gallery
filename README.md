@@ -21,7 +21,7 @@ The full design — scope, data model, image pipeline, admin, look and feel, mil
 
 - [Astro](https://astro.build) with `@astrojs/cloudflare` (server output, one Worker)
 - Cloudflare D1 (`DB`), R2 (`ORIGINALS`), Images (`IMAGES`), Access
-- React islands, Tailwind CSS v4, self-hosted Newsreader + Instrument Sans
+- React islands, Tailwind CSS v4, self-hosted Barlow Condensed + Barlow
 - pnpm, Node 22+
 
 ## Local development
@@ -144,4 +144,5 @@ Setup, once:
 - Local dev against live data is opt-in through a wrangler environment (`env.live`, `pnpm dev:live`) rather than `"remote": true` on the top-level bindings plus the adapter's `remoteBindings` switch: that switch is all-or-nothing, so it would also have turned the e2e tests and the remote-Images watermark check loose on live data. Bindings don't inherit into an env, so `env.live` repeats them; it has no routes and no workers.dev URL so it can't be deployed over the real domain by accident. Images stays local in `dev:live` to save transformations.
 - Deploys run on GitHub Actions, at the owner's request (free for a public repo): every push to `main`, plus a manual trigger. The job runs unit tests, build, `d1 migrations apply --remote`, then `wrangler deploy`, so migrations are no longer a separate manual step. The e2e suite isn't run there: it takes over 10 minutes and needs browsers. Third-party actions are pinned to commit SHAs.
 - Worker secrets are managed as GitHub secrets on a `production` environment limited to `main`, and go up with each deploy through `wrangler deploy --secrets-file`, in the same Worker version as the code. That flag is additive, so a secret not set in GitHub keeps its value on the Worker; `wrangler secret put` still works, and removing a secret also takes `wrangler secret delete`. Syncing only the secrets that are set, rather than requiring all three, means the AI keys stay optional.
+- Type changed from Newsreader + Instrument Sans to Barlow Condensed + Barlow at the owner's request, after comparing mockups. The `font-serif` token became `font-display`, since it's no longer a serif. Only weight 500 of Barlow Condensed is loaded. Title sizes went up about 18% so the condensed face holds its own. The watermark PNG wasn't regenerated: it's already rendered, and redoing it would change every derivative.
 - `workers_dev` and `preview_urls` are set to `false` explicitly: the site is served only on gallery.jaygovindsahu.com, where Access covers the admin paths. (The Worker was first created as a placeholder from the dashboard, which enables workers.dev; the first deploy replaces it.)
