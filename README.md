@@ -80,8 +80,8 @@ Setup, once:
 3. Run the Deploy workflow (**Actions → Deploy → Run workflow**). It applies the migrations and sends the keys with the deploy.
 4. Open `/admin/ai`: pick the model, paste a few captions you like under "Your voice", and (with both keys) turn on the blind comparison.
 
-- **Models:** `ANTHROPIC_MODEL` (`claude-haiku-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
-- **Cost:** well under a cent per photo on either default model. Each call is logged with its token counts (`pnpm wrangler tail gallery`).
+- **Models:** `ANTHROPIC_MODEL` (`claude-sonnet-5-5`) and `OPENAI_MODEL` (`gpt-5-mini`) in `wrangler.jsonc` `vars`. Check OpenAI's model list for the current small model and change the var if there is a newer one.
+- **Cost:** about 1.5–2 cents per photo on Sonnet, well under a cent on GPT mini. Each call is logged with its token counts (`pnpm wrangler tail gallery`).
 - **Subject:** fill it in when you know the species. General models are unreliable at exact species, so a name the AI came up with is marked as a guess to check.
 - **Privacy:** a photo is sent only when you click Suggest for it, as a 1568 px copy, with the location's name and the month. GPS coordinates and the original are never sent.
 - **Blind comparison:** every Suggest runs both models and shows two unlabeled sets; you pick one. `/admin/ai` keeps the count and reveals the winner when you ask.
@@ -105,7 +105,7 @@ Setup, once:
 - Unit tests run in plain Node (`vitest`), not the Workers pool: everything tested is pure logic.
 - Milestone 8 (AI suggestions) was built before milestone 7 because the owner asked for it; DESIGN.md gained an "AI suggestions" section for it.
 - AI providers: Anthropic and OpenAI, approved by the owner as the only services outside Cloudflare. The provider is one function (`runModel` in `src/lib/ai.ts`), chosen by a setting, so swapping models is a config change. Claude goes through the official SDK; OpenAI through one `fetch`, to avoid a second SDK in the Worker bundle.
-- Default models are the cheapest tier of each provider (`claude-haiku-5-5`, `gpt-5-mini`): with the subject supplied by the owner, the remaining difference between models is writing style, which the blind comparison settles.
+- Default models: `claude-sonnet-5-5` and `gpt-5-mini`. Claude started on Haiku, the cheapest tier, but it stopped at the group on hard identifications (a female House Finch) when the subject was left blank. The owner chose Sonnet for better identification at about 1.5–2 cents a photo instead of a tenth of a cent.
 - The subject is an input, not something the AI is trusted to find: general models do poorly at species-level identification. A name the model proposes is shown as a guess with its confidence. Without a subject, the model lists the field marks it sees before naming, and names the species when they settle it; it stops at the group ("a finch") only when the photo can't separate the candidates. Its alternatives are one-click buttons that make one the subject.
 - Suggestions run only on a click, per photo. No automatic or bulk generation: it keeps family photos out by default and the cost at zero unless asked.
 - The image sent to the model is made in the browser (1568 px JPEG) from the picked file or the admin preview, so it costs no extra Images transformation and the Worker never reads an original for it.

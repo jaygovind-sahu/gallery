@@ -8,7 +8,7 @@ interface __BaseEnv_Env {
 	SITE_URL: "https://gallery.jaygovindsahu.com";
 	ACCESS_TEAM_DOMAIN: "blue-shadow-d31f.cloudflareaccess.com";
 	ACCESS_AUD: "b97cb6cfa779e4f255dbb60f4e6724cc18e473bd0d52740fdf3ea9b205a69b8d";
-	ANTHROPIC_MODEL: "claude-haiku-5-5";
+	ANTHROPIC_MODEL: "claude-sonnet-5-5";
 	OPENAI_MODEL: "gpt-5-mini";
 	OPENAI_REASONING_EFFORT: "low";
 	DEV_BYPASS_AUTH: string;
@@ -25,7 +25,7 @@ declare namespace Cloudflare {
 		SITE_URL: "https://gallery.jaygovindsahu.com";
 		ACCESS_TEAM_DOMAIN: "blue-shadow-d31f.cloudflareaccess.com";
 		ACCESS_AUD: "b97cb6cfa779e4f255dbb60f4e6724cc18e473bd0d52740fdf3ea9b205a69b8d";
-		ANTHROPIC_MODEL: "claude-haiku-5-5";
+		ANTHROPIC_MODEL: "claude-sonnet-5-5";
 		OPENAI_MODEL: "gpt-5-mini";
 		OPENAI_REASONING_EFFORT: "low";
 		DEV_BYPASS_AUTH: string;

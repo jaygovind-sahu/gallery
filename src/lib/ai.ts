@@ -37,7 +37,7 @@ export interface AiImage {
 }
 
 const DEFAULT_MODELS: Record<Provider, string> = {
-  anthropic: 'claude-haiku-5-5',
+  anthropic: 'claude-sonnet-5-5',
   openai: 'gpt-5-mini',
 };
 

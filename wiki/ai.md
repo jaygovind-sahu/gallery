@@ -19,7 +19,7 @@ A **Suggest** button on each upload card and on the photo edit page asks a model
 
 | Provider | Model (default) | Key | Call |
 | --- | --- | --- | --- |
-| `anthropic` | `ANTHROPIC_MODEL` (`claude-haiku-5-5`) | secret `ANTHROPIC_API_KEY` | `@anthropic-ai/sdk`, `messages.parse` with a zod output format, effort `low` |
+| `anthropic` | `ANTHROPIC_MODEL` (`claude-sonnet-5-5`) | secret `ANTHROPIC_API_KEY` | `@anthropic-ai/sdk`, `messages.parse` with a zod output format, effort `low` |
 | `openai` | `OPENAI_MODEL` (`gpt-5-mini`) | secret `OPENAI_API_KEY` | `fetch` to Chat Completions with a strict JSON Schema; `OPENAI_REASONING_EFFORT` (`low`; set it empty for a model that rejects the parameter) |
 | `mock` | two stand-ins, `a` and `b` | `AI_MOCK=1` in `.dev.vars` | Canned answers that echo the request. Honoured only off the production hostname, like `DEV_BYPASS_AUTH` |
 
