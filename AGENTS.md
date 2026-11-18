@@ -30,6 +30,8 @@ Self-hosted photography gallery for gallery.jaygovindsahu.com on Cloudflare (Ast
 - `pnpm build` must pass before every commit. Run `pnpm test` and the e2e specs for what you touched.
 - If a change makes a wiki page wrong, fix the page in the same commit.
 - Deploys, remote migrations, and anything run against `pnpm dev:live` change the live gallery. Ask the owner first. **Pushing or merging to `main` is a deploy**: GitHub Actions applies any new migration and deploys ([deploy.md](wiki/deploy.md)).
+- **Before creating a branch or worktree, pull and look at the graph.** Run `git switch main && git pull --ff-only` (or `git fetch` and branch from `origin/main`), then `git log --oneline --graph -10 origin/main`. `main` is what's deployed. A stale local `main` hides merged work and puts the new branch behind it.
+- **No AI attribution in commits or PRs.** Commit messages and PR descriptions don't name an AI model or tool: no `Co-Authored-By` trailer for one, no "Generated with" line.
 
 ## Rules that must not break
 
