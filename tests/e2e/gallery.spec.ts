@@ -39,7 +39,7 @@ test.describe('public gallery', () => {
 
   test.beforeAll(async ({ request }) => {
     const tag = Date.now().toString(36);
-    a = await createPhoto(request, `gallery-a-${tag}`);
+    a = await createPhoto(request, `gallery-a-${tag}`, { camera: 'Nikon Z50II', lens: 'Tamron 50-400mm', focalLengthMm: 400, aperture: 6.3, shutterS: 1 / 2000, iso: 1600 });
     b = await createPhoto(request, `gallery-b-${tag}`, { title: null });
     ids.push(a, b);
   });
@@ -102,10 +102,10 @@ test.describe('public gallery', () => {
 
   test('lightbox never enlarges a photo past its real pixels on the screen', async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'one viewport check covers it');
-    // landscape.jpg is 3000×2000, so the largest lightbox file is 2400×1600. In a 1920×1200 window the
-    // space left inside the lightbox's 64 px bands fits it at 1608×1072 CSS px.
+    // landscape.jpg is 3000×2000, so the largest lightbox file is 2400×1600. In a 1920×1200 window, with the
+    // 340 px details panel open (it opens with every photo) and the 64 px bands, it fits at 1452×968 CSS px.
     for (const { scale, width, zoomable } of [
-      { scale: 1, width: 1608, zoomable: true }, // fits the space; zoom can go on to 2400
+      { scale: 1, width: 1452, zoomable: true }, // fits the space; zoom can go on to 2400
       { scale: 2, width: 1200, zoomable: false }, // capped at 2400 / 2; already at real size
     ]) {
       const context = await browser.newContext({ viewport: { width: 1920, height: 1200 }, deviceScaleFactor: scale, baseURL: testInfo.project.use.baseURL });
@@ -121,7 +121,7 @@ test.describe('public gallery', () => {
     }
   });
 
-  test('lightbox: open, arrow through, /p/:id in the URL, Back closes, direct load opens', async ({ page }) => {
+  test('lightbox: open, arrow through, /p/:id in the URL, Back closes, direct load opens', async ({ page }, testInfo) => {
     await open(page, '/c/birds');
     await tile(page, a).click();
     const lightbox = page.locator('.yarl__root');
@@ -136,12 +136,29 @@ test.describe('public gallery', () => {
     await page.keyboard.press('ArrowLeft');
     await expect(page).toHaveURL(`/p/${a}`);
 
-    // Info panel on `i`.
-    await page.keyboard.press('i');
+    // The spec sheet opens with the photo, beside it on desktop and below it on phones, never over it.
     const info = page.locator('#lightbox-info');
     await expect(info).toBeVisible();
-    await expect(info.getByRole('heading')).toHaveText(/gallery-a-/);
+    await expect(info.getByRole('heading', { level: 2 })).toHaveText(/gallery-a-/);
+    const exposure = info.getByRole('region', { name: 'Exposure' });
+    for (const figure of ['400mm', 'ƒ/6.3', '1/2000s', '1600']) await expect(exposure).toContainText(figure);
+    await expect(info).toContainText('Nikon Z50II');
+    await expect(info).toContainText('Tamron 50-400mm');
     await expect(info.getByRole('link', { name: 'Marsh Creek State Park' })).toHaveAttribute('href', '/l/marsh-creek-state-park');
+    const photo = lightbox.locator('.yarl__slide_current img');
+    await expect
+      .poll(async () => {
+        const [p, s] = [await photo.boundingBox(), await info.boundingBox()];
+        if (!p || !s) return false;
+        return testInfo.project.name === 'phone' ? p.y + p.height <= s.y + 1 : p.x + p.width <= s.x + 1;
+      })
+      .toBe(true);
+
+    // `i` hides and shows it.
+    await page.keyboard.press('i');
+    await expect(info).toBeHidden();
+    await page.keyboard.press('i');
+    await expect(info).toBeVisible();
     await page.keyboard.press('i');
     await expect(info).toBeHidden();
 
@@ -153,6 +170,10 @@ test.describe('public gallery', () => {
     await tile(page, b).click();
     await expect(page).toHaveURL(`/p/${b}`);
     await expect(lightbox).toBeVisible();
+    // Hidden last time, but every photo opens with it again. b has no title and no EXIF.
+    await expect(info).toBeVisible();
+    await expect(info.getByRole('heading', { level: 2 })).toHaveText('Untitled');
+    await expect(info.getByRole('region', { name: 'Exposure' })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(lightbox).toHaveCount(0);
     await expect(page).toHaveURL(/\/c\/birds$/);

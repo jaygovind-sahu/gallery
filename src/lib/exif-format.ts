@@ -84,6 +84,36 @@ export function exifParts(e: ExifLike): string[] {
   ].filter((p): p is string => Boolean(p));
 }
 
+export interface ExposureFigure {
+  key: 'focal' | 'aperture' | 'shutter' | 'iso';
+  /** Full label for the side panel; the short one fits the phone sheet's single row of four. */
+  label: string;
+  shortLabel: string;
+  /** The figure without its unit: "400", "6.3" (shown as ƒ/6.3), "1/2000", "1600". */
+  value: string;
+  unit: string | null;
+}
+
+/** Focal length, aperture, shutter and ISO as large figures for the info panel, omitting missing ones. */
+export function exposureFigures(e: ExifLike): ExposureFigure[] {
+  const out: ExposureFigure[] = [];
+  const focal = e.focalLengthMm;
+  if (focal !== null && focal !== undefined && focal > 0) {
+    out.push({ key: 'focal', label: 'Focal length', shortLabel: 'Focal', value: String(Math.round(focal)), unit: 'mm' });
+  }
+  const f = e.aperture;
+  if (f !== null && f !== undefined && f > 0) {
+    out.push({ key: 'aperture', label: 'Aperture', shortLabel: 'Aperture', value: String(Math.round(f * 10) / 10), unit: null });
+  }
+  const shutter = formatShutter(e.shutterS);
+  if (shutter) out.push({ key: 'shutter', label: 'Shutter', shortLabel: 'Shutter', value: shutter.replace(/ s$/, ''), unit: 's' });
+  const iso = e.iso;
+  if (iso !== null && iso !== undefined && iso > 0) {
+    out.push({ key: 'iso', label: 'ISO', shortLabel: 'ISO', value: String(Math.round(iso)), unit: null });
+  }
+  return out;
+}
+
 export function exifLine(e: ExifLike): string | null {
   const parts = exifParts(e);
   return parts.length ? parts.join(' · ') : null;

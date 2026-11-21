@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exifLine, exifParts, formatAperture, formatExposureComp, formatShutter, formatTakenAt } from '../../src/lib/exif-format';
+import { exifLine, exifParts, exposureFigures, formatAperture, formatExposureComp, formatShutter, formatTakenAt } from '../../src/lib/exif-format';
 
 describe('formatShutter', () => {
   it('shows fast shutters as fractions', () => {
@@ -52,5 +52,23 @@ describe('formatTakenAt', () => {
     expect(formatTakenAt('2026-01-05')).toBe('Jan 5, 2026');
     expect(formatTakenAt(null)).toBeNull();
     expect(formatTakenAt('nope')).toBeNull();
+  });
+});
+
+describe('exposureFigures', () => {
+  it('gives the four settings as figure and unit, in order', () => {
+    expect(exposureFigures({ focalLengthMm: 400, aperture: 6.3, shutterS: 1 / 2000, iso: 1600 })).toEqual([
+      { key: 'focal', label: 'Focal length', shortLabel: 'Focal', value: '400', unit: 'mm' },
+      { key: 'aperture', label: 'Aperture', shortLabel: 'Aperture', value: '6.3', unit: null },
+      { key: 'shutter', label: 'Shutter', shortLabel: 'Shutter', value: '1/2000', unit: 's' },
+      { key: 'iso', label: 'ISO', shortLabel: 'ISO', value: '1600', unit: null },
+    ]);
+  });
+  it('rounds like the EXIF line and keeps long exposures in seconds', () => {
+    expect(exposureFigures({ focalLengthMm: 23.6, aperture: 2.8000001, shutterS: 2.5 }).map((f) => f.value)).toEqual(['24', '2.8', '2.5']);
+  });
+  it('leaves out what is missing', () => {
+    expect(exposureFigures({ aperture: 8, iso: null, focalLengthMm: 0 }).map((f) => f.key)).toEqual(['aperture']);
+    expect(exposureFigures({})).toEqual([]);
   });
 });

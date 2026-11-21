@@ -120,13 +120,19 @@ function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void })
 
 /**
  * yet-another-react-lightbox with Zoom and Fullscreen; swipe, arrow keys, Esc, pinch and scroll zoom come
- * with it. `i` toggles the info panel. History is the gallery's job (see Gallery.tsx).
+ * with it. The info panel opens with every photo; `i` or its button toggles it. History is the gallery's
+ * job (see Gallery.tsx).
  */
 export default function Lightbox({ photos, index, open, onClose, onView, contextCategory }: Props) {
-  const [info, setInfo] = useState(false);
+  const [info, setInfo] = useState(true);
   const touchFirst = useTouchFirst();
   const pixelRatio = useDevicePixelRatio();
   const hidden = () => null;
+
+  // The spec sheet shows each time a visitor opens a photo; hiding it lasts until the lightbox closes.
+  useEffect(() => {
+    if (open) setInfo(true);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

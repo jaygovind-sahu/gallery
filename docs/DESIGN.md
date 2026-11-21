@@ -332,7 +332,7 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 
 - `yet-another-react-lightbox` with Zoom, Captions/Info and Fullscreen plugins: swipe on touch, arrow keys, Esc to close, pinch and scroll zoom.
 - Opening a photo pushes `/p/:id` to history; closing restores the gallery URL; Back closes the lightbox.
-- Info panel (toggle with `i`): title, caption, date (e.g. "Oct 12, 2026"), location linked to `/l/:slug`, category chips, and the EXIF values: `Nikon Z50II · Tamron 50-400mm · 400 mm · f/6.3 · 1/2000 s · ISO 1600`. Omit any missing value rather than showing a blank.
+- Info panel, a spec sheet that opens with every photo (`i` or its button hides and shows it): title, caption, then the exposure as large figures (focal length, aperture as ƒ/6.3, shutter, ISO; a 2×2 grid on desktop, one row on phones), then camera, lens, exposure compensation, date (e.g. "Oct 12, 2026"), location linked to `/l/:slug`, and category chips. Omit any missing value rather than showing a blank.
 - Preload the next and previous slide.
 
 **Image markup and performance**
@@ -360,7 +360,7 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 - **Captions under every tile** in all three layouts: title in the display face (17 px, primary) and location in sans (12 px, secondary), each one line, truncated with an ellipsis. Untitled photo → location only. Captions take a fixed height (~44 px) so justified rows stay aligned; the layout height calculation must include it (custom render in `react-photo-album`).
 - **Spacing**: 8 px gutters on phones, 12 px on desktop; page side padding 16 px phone, 32 px desktop; generous space above page titles.
 - **Hover and motion**: tiles lift brightness slightly on hover (no zoom, no movement); images fade in over their ThumbHash in ~200 ms; respect `prefers-reduced-motion`.
-- **Lightbox**: pure black background, image as large as fits, but never enlarged past its real pixels on the visitor's screen (largest file ÷ device pixel ratio; zoom stops there too), below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel slides in from the right on desktop and as a bottom sheet on phones, with the display-face title over labelled sans details.
+- **Lightbox**: pure black background, image as large as fits, but never enlarged past its real pixels on the visitor's screen (largest file ÷ device pixel ratio; zoom stops there too), below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel is open when a photo opens: a side panel on the right on desktop, a bottom sheet on phones, and the photo is fitted into the space beside or above it. Display-face title, exposure in large display-face figures between hairlines, labelled sans details.
 - **Footer**: above a hairline, the site name, small © Jaygovind Sahu, the category links and a link back to jaygovindsahu.com.
 - **Accessible**: alt text = title, else "&lt;category&gt; photo, &lt;location&gt;, &lt;date&gt;"; text contrast ≥ 4.5:1 on the dark background; visible focus rings; lightbox fully keyboard-operable.
 

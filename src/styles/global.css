@@ -329,10 +329,10 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   background: var(--color-surface);
   color: var(--color-ink);
-  padding: 24px;
+  padding: 10px 20px 28px;
   transition: transform 220ms ease, visibility 220ms;
   overflow-y: auto;
   /* phone: bottom sheet */
@@ -355,6 +355,8 @@
     bottom: 0;
     width: 340px;
     max-height: none;
+    gap: 24px;
+    padding: 28px 28px 32px;
     border-top: 0;
     border-left: 1px solid var(--color-divider);
     transform: translateX(100%);
@@ -368,19 +370,124 @@
   }
 }
 
-/* Detail rows in the info panel: a small caps term over its value, hairlines between the groups. */
-.info-panel__details {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* Phones: the open sheet covers the bottom of the lightbox, so the container's bottom padding takes its
+   height (InfoPanel measures it) and the photo is fitted into the space above. */
+@media (max-width: 767.98px) {
+  .lightbox--info .yarl__container {
+    padding-bottom: var(--info-sheet-height, 56px);
+  }
+}
+
+/* The sheet's grab handle; phones only. */
+.info-panel__grabber {
+  flex-shrink: 0;
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  margin-bottom: -6px;
+  border-radius: 999px;
+  background: var(--color-divider);
+}
+@media (min-width: 768px) {
+  .info-panel__grabber {
+    display: none;
+  }
+}
+
+/* Exposure as large figures between hairlines: one row on phones (as many columns as figures), a 2×2 grid
+   in the desktop panel. */
+.info-panel__exposure {
+  display: grid;
+  grid-template-columns: repeat(var(--figures, 4), minmax(0, 1fr));
   margin: 0;
-  padding: 18px 0;
   border-top: 1px solid var(--color-divider);
   border-bottom: 1px solid var(--color-divider);
 }
+.info-panel__exposure > div {
+  min-width: 0;
+  padding: 12px 8px 14px 10px;
+  border-left: 1px solid var(--color-divider);
+}
+.info-panel__exposure > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.info-panel__exposure dt {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+.info-panel__exposure dd {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+.info-panel__unit {
+  margin-left: 2px;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+@media (min-width: 768px) {
+  .info-panel__exposure {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: 0;
+  }
+  .info-panel__exposure > div,
+  .info-panel__exposure > div:first-child {
+    padding: 14px 0 16px 16px;
+    border-left: 1px solid var(--color-divider);
+    border-bottom: 1px solid var(--color-divider);
+  }
+  .info-panel__exposure > div:nth-child(odd) {
+    padding: 14px 16px 16px 0;
+    border-left: 0;
+  }
+  .info-panel__exposure dt {
+    font-size: 11px;
+    line-height: 16px;
+    letter-spacing: 0.16em;
+  }
+  .info-panel__exposure dd {
+    font-size: 36px;
+  }
+  .info-panel__unit {
+    margin-left: 4px;
+    font-size: 14px;
+  }
+}
+
+/* Camera, lens, date and location: a small caps term over its value; two columns on phones. */
+.info-panel__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  margin: 0;
+}
 .info-panel__details dd {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
   color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+@media (min-width: 768px) {
+  .info-panel__details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .info-panel__details dd {
+    margin-top: 3px;
+    font-size: 15px;
+    line-height: 22px;
+  }
 }
