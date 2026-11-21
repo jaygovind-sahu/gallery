@@ -3,7 +3,7 @@
  * Pure parts (allowlist, format negotiation) are unit-tested; `transformOriginal` needs the Images binding.
  */
 
-export const SIZES = [480, 768, 1080, 1600, 2400, 3200] as const;
+export const SIZES = [480, 768, 1080, 1600, 2400] as const;
 export type Size = (typeof SIZES)[number];
 
 /** Long edge, quality and whether the watermark is drawn, per allowlisted size. */
@@ -13,11 +13,10 @@ export const SIZE_SPECS: Record<Size, { quality: number; watermark: boolean }> =
   1080: { quality: 85, watermark: false },
   1600: { quality: 88, watermark: true },
   2400: { quality: 88, watermark: true },
-  3200: { quality: 88, watermark: true },
 };
 
 export const GRID_SIZES: Size[] = [480, 768, 1080];
-export const LIGHTBOX_SIZES: Size[] = [1600, 2400, 3200];
+export const LIGHTBOX_SIZES: Size[] = [1600, 2400];
 
 /** Parse a size path segment; only exact allowlisted values pass ("480", not "480.0" or "0480"). */
 export function parseSize(raw: string | undefined | null): Size | null {

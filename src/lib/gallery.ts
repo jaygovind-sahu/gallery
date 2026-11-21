@@ -68,9 +68,18 @@ export function tileSources(photo: Pick<PublicPhoto, 'id' | 'version' | 'width' 
   return sources(photo, GRID_SIZES);
 }
 
-/** 1600 / 2400 / 3200 for the lightbox. */
+/** 1600 / 2400 for the lightbox. */
 export function lightboxSources(photo: Pick<PublicPhoto, 'id' | 'version' | 'width' | 'height'>): ImageSource[] {
   return sources(photo, LIGHTBOX_SIZES);
+}
+
+/**
+ * The largest size, in CSS px, at which an image of `width`×`height` pixels can be drawn without
+ * enlarging it: one image pixel per screen pixel. On a 2× screen that's half its pixel size.
+ */
+export function realSizeLimit(width: number, height: number, devicePixelRatio: number): { width: number; height: number } {
+  const ratio = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  return { width: width / ratio, height: height / ratio };
 }
 
 /** The ThumbHash placeholder as a PNG data URL, or null when there is none or it is malformed. */

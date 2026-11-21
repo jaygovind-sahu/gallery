@@ -41,7 +41,8 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 
 ## Lightbox
 
-- [Lightbox.tsx](../src/components/gallery/Lightbox.tsx) wraps `yet-another-react-lightbox` with the Zoom and Fullscreen plugins. Sources come from `lightboxSources` (1600 / 2400 / 3200).
+- [Lightbox.tsx](../src/components/gallery/Lightbox.tsx) wraps `yet-another-react-lightbox` with the Zoom and Fullscreen plugins. Sources come from `lightboxSources` (1600 / 2400).
+- **Real size, never enlarged:** `carousel.imageProps` caps each photo at its largest file's pixels divided by `devicePixelRatio` (`realSizeLimit` in `gallery.ts`), so on a big high-resolution screen it sits smaller, with more black around it, rather than going soft. Zoom's `maxZoomPixelRatio` is `1 / devicePixelRatio`, so zoom also stops at one image pixel per screen pixel; where the photo is already at that size the zoom buttons are disabled. `useDevicePixelRatio` follows browser zoom and moves between monitors.
 - **Info panel:** [InfoPanel.tsx](../src/components/gallery/InfoPanel.tsx) is our own component, rendered through `render.controls`, and `i` toggles it. It shows the title, caption, then labelled rows for the date, a location link and the EXIF line (`exifLine` in `exif-format.ts`), then category chips.
 - **Title bar and reserved band:** `render.controls` also draws the title bar (title, location, "3 / 18") top left. CSS padding on `.yarl__container` keeps a band free at the top (and gutters for the arrows on desktop); the library measures the container minus its padding, so the image fits the space left and no control sits on it.
 - **Icons and touch:** the toolbar and arrows use our thin outline icons (`render.icon*`). On touch-first screens (`(hover: none) and (pointer: coarse)`) the arrow and zoom buttons are hidden; swipe and pinch do the job.

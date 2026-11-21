@@ -3,11 +3,11 @@ import { cacheKey, imageUrl, isImagesQuotaError, isUploadMime, originalKey, pars
 import { reconcileDimensions } from '../../src/lib/originals-pure';
 
 describe('size allowlist', () => {
-  it('accepts exactly the six sizes', () => {
+  it('accepts exactly the five sizes', () => {
     for (const s of SIZES) expect(parseSize(String(s))).toBe(s);
   });
   it('rejects anything else', () => {
-    for (const bad of ['0', '100', '481', '0480', '480.0', '4800', '-480', 'abc', '', undefined, null, '1e3']) {
+    for (const bad of ['0', '100', '481', '0480', '480.0', '3200', '4800', '-480', 'abc', '', undefined, null, '1e3']) {
       expect(parseSize(bad)).toBeNull();
     }
   });
@@ -15,7 +15,7 @@ describe('size allowlist', () => {
     expect(SIZE_SPECS[480].watermark).toBe(false);
     expect(SIZE_SPECS[1080].watermark).toBe(false);
     expect(SIZE_SPECS[1600].watermark).toBe(true);
-    expect(SIZE_SPECS[3200].watermark).toBe(true);
+    expect(SIZE_SPECS[2400].watermark).toBe(true);
   });
 });
 

@@ -34,7 +34,7 @@ Failures:
 
 ## Which sizes go where
 
-- Tiles use 480 / 768 / 1080 (`GRID_SIZES`), the lightbox 1600 / 2400 / 3200 (`LIGHTBOX_SIZES`), Open Graph 1600.
+- Tiles use 480 / 768 / 1080 (`GRID_SIZES`), the lightbox 1600 / 2400 (`LIGHTBOX_SIZES`), Open Graph 1600.
 - The watermark is on 1600 and up.
 - `tileSources` / `lightboxSources` in [src/lib/gallery.ts](../src/lib/gallery.ts) build `srcset` entries with the right dimensions. They list a size only once when the original is smaller than several sizes.
 

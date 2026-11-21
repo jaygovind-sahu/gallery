@@ -1,4 +1,5 @@
 /** HTTP helpers for the admin islands: JSON calls with retries, an XHR PUT with progress, byte formatting. */
+import type { Size } from '../images';
 
 export class RequestFailed extends Error {
   constructor(
@@ -99,7 +100,7 @@ export function formatBytes(n: number): string {
 }
 
 /** Private preview URL for the admin UI (no publish check, no watermark, never cached). */
-export function adminImageUrl(id: string, size: 480 | 768 | 1080 | 1600 | 2400 | 3200, version = 1): string {
+export function adminImageUrl(id: string, size: Size, version = 1): string {
   return `/api/admin/img/${id}/${size}?v=${version}`;
 }
 

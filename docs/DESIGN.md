@@ -200,8 +200,7 @@ Originals sit in a private R2 bucket; one Worker route turns them into cached, r
 | 768 | grid tiles | no | 82 |
 | 1080 | grid tiles on retina (largest grid size) | no | 85 |
 | 1600 | lightbox on phones/laptops, Open Graph image | yes | 88 |
-| 2400 | lightbox on large/retina screens | yes | 88 |
-| 3200 | lightbox on 4K / zoom | yes | 88 |
+| 2400 | lightbox on large/retina screens (largest size) | yes | 88 |
 
 **Watermark**
 
@@ -217,7 +216,7 @@ Originals sit in a private R2 bucket; one Worker route turns them into cached, r
 
 **Admin preview route** — `GET /api/admin/img/<photoId>/<size>` behind Access: same transform, no publish check, no watermark, `Cache-Control: private, no-store`. Used for drafts in the admin UI.
 
-**Cost guardrail** — each (photo, size, format) is one unique transformation per month, so the worst case is 12 per photo. The free plan includes 5,000 unique transformations a month, then $0.50 per 1,000 on the paid Images plan. On the free plan, new transformations past the limit fail (error 9422) while cached ones keep working. The route should log that error and return 503, never fall back to the original.
+**Cost guardrail** — each (photo, size, format) is one unique transformation per month, so the worst case is 10 per photo. The free plan includes 5,000 unique transformations a month, then $0.50 per 1,000 on the paid Images plan. On the free plan, new transformations past the limit fail (error 9422) while cached ones keep working. The route should log that error and return 503, never fall back to the original.
 
 ## Upload & admin
 
@@ -338,7 +337,7 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 
 **Image markup and performance**
 
-- Every `<img>` has explicit `width`/`height` from the DB (no layout shift) and a `srcset` from the allowlist: grid uses 480/768/1080, lightbox uses 1600/2400/3200, with `sizes` matching the rendered width.
+- Every `<img>` has explicit `width`/`height` from the DB (no layout shift) and a `srcset` from the allowlist: grid uses 480/768/1080, lightbox uses 1600/2400, with `sizes` matching the rendered width.
 - The ThumbHash placeholder renders as the tile background until the image loads, then fades.
 - First row loads eagerly with `fetchpriority="high"`; everything else lazy.
 - HTML responses: `Cache-Control: public, s-maxage=60, stale-while-revalidate=600`, so admin changes show within about a minute.
@@ -346,7 +345,7 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 
 **Download deterrents** (they deter, not prevent; screenshots always work)
 
-- Originals are never reachable; the largest public size is 3200 px and watermarked.
+- Originals are never reachable; the largest public size is 2400 px and watermarked.
 - On gallery and lightbox images: block the context menu, `draggable="false"`, `user-select: none`, `-webkit-touch-callout: none` (stops the iOS long-press save sheet).
 - No download button anywhere.
 
@@ -361,7 +360,7 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 - **Captions under every tile** in all three layouts: title in the display face (17 px, primary) and location in sans (12 px, secondary), each one line, truncated with an ellipsis. Untitled photo → location only. Captions take a fixed height (~44 px) so justified rows stay aligned; the layout height calculation must include it (custom render in `react-photo-album`).
 - **Spacing**: 8 px gutters on phones, 12 px on desktop; page side padding 16 px phone, 32 px desktop; generous space above page titles.
 - **Hover and motion**: tiles lift brightness slightly on hover (no zoom, no movement); images fade in over their ThumbHash in ~200 ms; respect `prefers-reduced-motion`.
-- **Lightbox**: pure black background, image as large as fits below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel slides in from the right on desktop and as a bottom sheet on phones, with the display-face title over labelled sans details.
+- **Lightbox**: pure black background, image as large as fits, but never enlarged past its real pixels on the visitor's screen (largest file ÷ device pixel ratio; zoom stops there too), below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel slides in from the right on desktop and as a bottom sheet on phones, with the display-face title over labelled sans details.
 - **Footer**: above a hairline, the site name, small © Jaygovind Sahu, the category links and a link back to jaygovindsahu.com.
 - **Accessible**: alt text = title, else "&lt;category&gt; photo, &lt;location&gt;, &lt;date&gt;"; text contrast ≥ 4.5:1 on the dark background; visible focus rings; lightbox fully keyboard-operable.
 
@@ -520,7 +519,7 @@ Nothing here is built in v1; the schema and routes should simply not block it.
 
 **Open questions for the owner**
 
-- Watermark size and opacity: tune after seeing real bird and astro shots at 1600 and 3200 px.
+- Watermark size and opacity: tune after seeing real bird and astro shots at 1600 and 2400 px.
 - Home page: show the latest uploads (current plan) or a hand-picked featured set?
 
 ## Sources

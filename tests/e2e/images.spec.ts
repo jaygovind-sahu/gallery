@@ -10,7 +10,7 @@ import sharp from 'sharp';
 
 const fixture = (name: string) => path.join(import.meta.dirname, '..', 'fixtures', name);
 const BIRDS = '01M53JH10086R420JC0GP7PP0A';
-const SIZES = [480, 768, 1080, 1600, 2400, 3200] as const;
+const SIZES = [480, 768, 1080, 1600, 2400] as const;
 const AVIF = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8';
 const WEBP = 'image/webp,image/apng,image/*,*/*;q=0.8';
 
@@ -113,7 +113,7 @@ test.describe('public image route', () => {
     test.skip(!process.env.REMOTE_IMAGES, 'the local Images binding ignores draw(); run with REMOTE_IMAGES=1 (README)');
     const plain = await derivative(request, landscape, 1080, WEBP);
     expect(await cornerBrightness(plain.body, 'right')).toBeCloseTo(await cornerBrightness(plain.body, 'left'), 0);
-    for (const size of [1600, 2400, 3200] as const) {
+    for (const size of [1600, 2400] as const) {
       const marked = await derivative(request, landscape, size, WEBP);
       const left = await cornerBrightness(marked.body, 'left');
       const right = await cornerBrightness(marked.body, 'right');
@@ -122,7 +122,7 @@ test.describe('public image route', () => {
   });
 
   test('disallowed size, wrong version, draft, unknown id and unpublished photos are 404', async ({ request }) => {
-    for (const url of [`/img/${landscape}/v1/500`, `/img/${landscape}/v1/1200`, `/img/${landscape}/v2/480`, `/img/${landscape}/v01/480`, `/img/${landscape}/1/480`, `/img/${BIRDS}/v1/480`, '/img/nope/v1/480']) {
+    for (const url of [`/img/${landscape}/v1/500`, `/img/${landscape}/v1/1200`, `/img/${landscape}/v1/3200`, `/img/${landscape}/v2/480`, `/img/${landscape}/v01/480`, `/img/${landscape}/1/480`, `/img/${BIRDS}/v1/480`, '/img/nope/v1/480']) {
       const res = await request.get(url, { headers: { accept: AVIF } });
       expect(res.status(), url).toBe(404);
     }

@@ -4,7 +4,7 @@ import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
 import type { PublicPhoto } from '../../lib/db';
-import { altText, lightboxSources } from '../../lib/gallery';
+import { altText, lightboxSources, realSizeLimit } from '../../lib/gallery';
 import InfoPanel from './InfoPanel';
 
 declare module 'yet-another-react-lightbox' {
@@ -71,6 +71,25 @@ function useTouchFirst(): boolean {
   return touch;
 }
 
+/** Screen pixels per CSS pixel. It changes with browser zoom and when the window moves to another monitor. */
+function useDevicePixelRatio(): number {
+  const [ratio, setRatio] = useState(1);
+  useEffect(() => {
+    let query: MediaQueryList | null = null;
+    const update = () => {
+      query?.removeEventListener('change', update);
+      const current = window.devicePixelRatio || 1;
+      setRatio(current);
+      // A resolution query only reports leaving this exact ratio, so re-arm it for each new one.
+      query = window.matchMedia(`(resolution: ${current}dppx)`);
+      query.addEventListener('change', update);
+    };
+    update();
+    return () => query?.removeEventListener('change', update);
+  }, []);
+  return ratio;
+}
+
 /** Title, location and position of the current photo, in the band above it; plus the info panel. */
 function Controls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { currentSlide, currentIndex, slides } = useLightboxState();
@@ -106,6 +125,7 @@ function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void })
 export default function Lightbox({ photos, index, open, onClose, onView, contextCategory }: Props) {
   const [info, setInfo] = useState(false);
   const touchFirst = useTouchFirst();
+  const pixelRatio = useDevicePixelRatio();
   const hidden = () => null;
 
   useEffect(() => {
@@ -141,9 +161,20 @@ export default function Lightbox({ photos, index, open, onClose, onView, context
       index={index}
       slides={slides}
       plugins={[Zoom, Fullscreen]}
-      carousel={{ preload: 1, padding: 0, imageProps: { draggable: false } }}
+      carousel={{
+        preload: 1,
+        padding: 0,
+        // Never enlarge a photo: cap it at its largest file's real pixels on this screen. On a big
+        // high-resolution monitor it then sits smaller, with more black around it, instead of going soft.
+        imageProps: (slide) => {
+          if (!('width' in slide) || !slide.width || !slide.height) return { draggable: false };
+          const limit = realSizeLimit(slide.width, slide.height, pixelRatio);
+          return { draggable: false, style: { maxWidth: `min(${limit.width}px, 100%)`, maxHeight: `min(${limit.height}px, 100%)` } };
+        },
+      }}
       controller={{ closeOnPullDown: true, closeOnBackdropClick: true }}
-      zoom={{ maxZoomPixelRatio: 2, scrollToZoom: true }}
+      // The same rule for zoom: it stops at one image pixel per screen pixel.
+      zoom={{ maxZoomPixelRatio: 1 / pixelRatio, scrollToZoom: true }}
       on={{ view: ({ index: i }) => onView(i) }}
       styles={{ container: { backgroundColor: '#000' } }}
       className={info ? 'lightbox lightbox--info' : 'lightbox'}

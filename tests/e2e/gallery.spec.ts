@@ -100,6 +100,27 @@ test.describe('public gallery', () => {
     await expect(page).toHaveURL(/\/c\/birds$/);
   });
 
+  test('lightbox never enlarges a photo past its real pixels on the screen', async ({ browser }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'one viewport check covers it');
+    // landscape.jpg is 3000×2000, so the largest lightbox file is 2400×1600. In a 1920×1200 window the
+    // space left inside the lightbox's 64 px bands fits it at 1608×1072 CSS px.
+    for (const { scale, width, zoomable } of [
+      { scale: 1, width: 1608, zoomable: true }, // fits the space; zoom can go on to 2400
+      { scale: 2, width: 1200, zoomable: false }, // capped at 2400 / 2; already at real size
+    ]) {
+      const context = await browser.newContext({ viewport: { width: 1920, height: 1200 }, deviceScaleFactor: scale, baseURL: testInfo.project.use.baseURL });
+      const page = await context.newPage();
+      await open(page, `/p/${a}`);
+      const img = page.locator('.yarl__slide_current img');
+      await expect(img).toBeVisible();
+      await expect.poll(async () => Math.abs(((await img.boundingBox())?.width ?? 0) - width), { message: `width at ${scale}×` }).toBeLessThanOrEqual(2);
+      const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+      if (zoomable) await expect(zoomIn).toBeEnabled();
+      else await expect(zoomIn).toBeDisabled();
+      await context.close();
+    }
+  });
+
   test('lightbox: open, arrow through, /p/:id in the URL, Back closes, direct load opens', async ({ page }) => {
     await open(page, '/c/birds');
     await tile(page, a).click();
@@ -107,7 +128,7 @@ test.describe('public gallery', () => {
     await expect(lightbox).toBeVisible();
     await expect(page).toHaveURL(`/p/${a}`);
     // The lightbox picks one of the large sizes for the viewport and pixel ratio.
-    await expect(lightbox.locator('.yarl__slide_current img')).toHaveAttribute('src', new RegExp(`/img/${a}/v1/(1600|2400|3200)$`));
+    await expect(lightbox.locator('.yarl__slide_current img')).toHaveAttribute('src', new RegExp(`/img/${a}/v1/(1600|2400)$`));
 
     await page.keyboard.press('ArrowRight');
     await expect(page).not.toHaveURL(`/p/${a}`);

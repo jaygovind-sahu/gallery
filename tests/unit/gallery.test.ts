@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { altText, derivativeDimensions, lightboxSources, placeholderDataUrl, resolveLayout, tileCaption, tileSources, withLayoutParam } from '../../src/lib/gallery';
+import { altText, derivativeDimensions, lightboxSources, placeholderDataUrl, realSizeLimit, resolveLayout, tileCaption, tileSources, withLayoutParam } from '../../src/lib/gallery';
 
 const base = { id: '01ABC', version: 2, width: 3000, height: 2000, title: null, categories: [{ slug: 'birds', name: 'Birds' }], location: { slug: 'bombay-hook-nwr', name: 'Bombay Hook NWR' }, takenAt: '2026-10-12T14:03:11' };
 
@@ -39,13 +39,25 @@ describe('sources', () => {
       { src: '/img/01ABC/v2/768', width: 768, height: 512 },
       { src: '/img/01ABC/v2/1080', width: 1080, height: 720 },
     ]);
-    expect(lightboxSources(base).map((s) => s.src)).toEqual(['/img/01ABC/v2/1600', '/img/01ABC/v2/2400', '/img/01ABC/v2/3200']);
+    expect(lightboxSources(base).map((s) => s.src)).toEqual(['/img/01ABC/v2/1600', '/img/01ABC/v2/2400']);
   });
   it('drops sizes that would just repeat the original', () => {
     expect(lightboxSources({ ...base, width: 1800, height: 1200 })).toEqual([
       { src: '/img/01ABC/v2/1600', width: 1600, height: 1067 },
       { src: '/img/01ABC/v2/2400', width: 1800, height: 1200 },
     ]);
+  });
+});
+
+describe('realSizeLimit', () => {
+  it('caps a photo at one image pixel per screen pixel', () => {
+    expect(realSizeLimit(2400, 1600, 1)).toEqual({ width: 2400, height: 1600 });
+    expect(realSizeLimit(2400, 1600, 2)).toEqual({ width: 1200, height: 800 });
+    expect(realSizeLimit(1800, 1200, 1.5)).toEqual({ width: 1200, height: 800 });
+  });
+  it('treats a missing or broken ratio as 1', () => {
+    expect(realSizeLimit(2400, 1600, 0)).toEqual({ width: 2400, height: 1600 });
+    expect(realSizeLimit(2400, 1600, Number.NaN)).toEqual({ width: 2400, height: 1600 });
   });
 });
 
