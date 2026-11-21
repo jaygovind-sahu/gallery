@@ -6,7 +6,7 @@ The owner's private area, which has to work on a phone as well as a laptop. Ever
 
 | Page | File (`src/pages/admin/`) | Island (`src/components/admin/`) |
 | --- | --- | --- |
-| `/admin` | `index.astro` | `Library`: filters (category, location, published / draft / uploading), multi-select bulk actions. A row stuck in `uploading` for over 24 h is flagged with retry and delete |
+| `/admin` | `index.astro` | `Library`: filters (category or "No category", location, published / draft / uploading), multi-select bulk actions. A row stuck in `uploading` for over 24 h is flagged with retry and delete |
 | `/admin/upload` | `upload.astro` | `UploadQueue` (below) |
 | `/admin/photos/:id` | `photos/[id].astro` | `PhotoForm`: every field, Replace original, Re-read EXIF, Delete, View on site. Title, subject, saved captions and hashtags are the shared `TextFields` island ([ai.md](ai.md)) |
 | `/admin/categories` | `categories/index.astro` | `CategoryManager`: create, rename, describe, slug, default layout, cover, reorder with up/down buttons, delete |
@@ -41,7 +41,7 @@ All JSON, under `/api/admin/`. Errors are `{ error: { code, message } }` with a 
 
 | Method + path | Does |
 | --- | --- |
-| `GET photos` | Library list; query `category`, `location`, `status` (`published` / `draft` / `uploading`) |
+| `GET photos` | Library list; query `category` (an id, or `__none` for photos in no category), `location`, `status` (`published` / `draft` / `uploading`) |
 | `POST photos` | Create the row from browser-read metadata → `{ id }`. Takes `subject`, `hashtags`, `captions` and `captionTone` as well as the older `caption` |
 | `POST photos/duplicates` | `{ files: [{ key, originalFilename, bytes, takenAt }] }` → `{ matches: { [key]: [{ id, title, originalFilename }] } }` |
 | `GET photos/:id` | One photo, admin view |

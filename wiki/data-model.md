@@ -27,7 +27,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
 - **`listLocationCentroids`** averages the private GPS of photos per location for the upload page's location suggestion. Admin only.
 - **`findDuplicatePhotos`** matches a file about to be uploaded: same `bytes`, and the same filename or capture time.
 - **A photo's categories** come back from one `group_concat`, ordered by category position, with `\x1f` between slug and name and `\x1e` between categories.
-- **Slugs.** Create uses `slugify`, plus `-2`, `-3`, … until the slug is free. A PATCH to a slug that's taken is a 409 `slug_taken`.
+- **Slugs.** Create uses `slugify`, plus `-2`, `-3`, … until the slug is free. A PATCH to a slug that's taken is a 409 `slug_taken`. Category slugs in `RESERVED_CATEGORY_SLUGS` (`miscellaneous`) count as taken.
 
 ## Ordering
 
@@ -38,6 +38,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
 | `/all` | `photos.sort_order` | API only (`PATCH photos/:id` `sortOrder`); there is no UI yet |
 | Location page | `taken_at` newest first (undated last), then upload time | — |
 | Home | `created_at` newest first, 48 photos (`HOME_LIMIT`) | — |
+| Miscellaneous (`/c/miscellaneous`) | `created_at` newest first: photos in no category have no manual order | — |
 
 - `positionBetween(before, after)` in [src/lib/order.ts](../src/lib/order.ts) returns the midpoint. When the gap is ≤ 1e-6 it also flags a renumber, and `movePhotoInCategory` then rewrites the whole category as 1..n.
 - New category memberships and new photos append at max + 1 (newest last).

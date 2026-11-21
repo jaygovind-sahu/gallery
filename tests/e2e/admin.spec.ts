@@ -57,6 +57,15 @@ test('library: filters, selection and bulk actions', async ({ page }) => {
   await expect(page.getByRole('link', { name: `lib-b-${tag}` })).toBeVisible();
   await expect(page.getByRole('link', { name: `lib-a-${tag}` })).toHaveCount(0);
 
+  // "No category" finds photos that haven't been filed yet.
+  const c = await createPhoto(page, `lib-c-${tag}`, { published: false, categoryIds: [] });
+  await page.getByRole('combobox', { name: /^Category/ }).selectOption({ label: 'No category' });
+  await expect(page.getByRole('link', { name: `lib-c-${tag}` })).toBeVisible();
+  await expect(page.getByRole('link', { name: `lib-b-${tag}` })).toHaveCount(0);
+  await page.getByRole('combobox', { name: /^Category/ }).selectOption({ label: 'All categories' });
+  await expect(page.getByRole('link', { name: `lib-b-${tag}` })).toBeVisible();
+  await page.request.delete(`/api/admin/photos/${c.id}`);
+
   await page.getByLabel('Status').selectOption({ label: 'All' });
   await expect(page.getByRole('link', { name: `lib-a-${tag}` })).toBeVisible();
 

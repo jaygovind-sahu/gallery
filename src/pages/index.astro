@@ -1,11 +1,11 @@
 ---
 // Home: the header, then straight into the latest photos (docs/DESIGN.md, "Public gallery").
 import GalleryPage from '../components/gallery/GalleryPage.astro';
-import { getSetting, listCategories, listLatestPhotos } from '../lib/db';
+import { getPublicNav, getSetting, listLatestPhotos } from '../lib/db';
 import { HOME_LIMIT, isLayout } from '../lib/gallery';
 
-const [categories, siteTitle, defaultSetting, photos] = await Promise.all([
-  listCategories(),
+const [nav, siteTitle, defaultSetting, photos] = await Promise.all([
+  getPublicNav(),
   getSetting('site_title'),
   getSetting('default_layout'),
   listLatestPhotos(HOME_LIMIT),
@@ -13,6 +13,6 @@ const [categories, siteTitle, defaultSetting, photos] = await Promise.all([
 const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
 ---
 
-<GalleryPage title={siteTitle ?? 'Jay’s Gallery'} categories={categories} photos={photos} defaultLayout={defaultLayout} galleryUrl="/">
+<GalleryPage title={siteTitle ?? 'Jay’s Gallery'} nav={nav} photos={photos} defaultLayout={defaultLayout} galleryUrl="/">
   <h1 class="sr-only">Latest photos</h1>
 </GalleryPage>

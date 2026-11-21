@@ -1,0 +1,25 @@
+---
+// Miscellaneous: published photos that are in no category, newest upload first. The slug is reserved
+// (src/lib/slug.ts), so no real category can take this address; with no such photos it's a 404.
+import GalleryPage from '../../components/gallery/GalleryPage.astro';
+import { getPublicNav, getSetting, listUncategorizedPhotos } from '../../lib/db';
+import { isLayout } from '../../lib/gallery';
+
+const [nav, defaultSetting, photos] = await Promise.all([getPublicNav(), getSetting('default_layout'), listUncategorizedPhotos()]);
+// An empty 404 renders src/pages/404.astro.
+if (photos.length === 0) return new Response(null, { status: 404 });
+
+const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
+const countLabel = `${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}`;
+---
+
+<GalleryPage
+  title="Miscellaneous — Jay’s Gallery"
+  nav={nav}
+  activeSlug="miscellaneous"
+  heading="Miscellaneous"
+  eyebrow={countLabel}
+  photos={photos}
+  defaultLayout={defaultLayout}
+  galleryUrl="/c/miscellaneous"
+/>

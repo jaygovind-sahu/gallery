@@ -1,8 +1,8 @@
 ---
-// Photo permalink: the lightbox opens over the photo's first category (or /all), with Open Graph tags
-// so shared links preview well. Drafts and unknown ids are 404s.
+// Photo permalink: the lightbox opens over the photo's first category (or Miscellaneous when it's in none),
+// with Open Graph tags so shared links preview well. Drafts and unknown ids are 404s.
 import GalleryPage from '../../components/gallery/GalleryPage.astro';
-import { getCategoryBySlug, getPublicPhoto, getSetting, listAllPhotos, listCategories, listCategoryPhotos } from '../../lib/db';
+import { getCategoryBySlug, getPublicNav, getPublicPhoto, getSetting, listCategoryPhotos, listUncategorizedPhotos } from '../../lib/db';
 import { isLayout } from '../../lib/gallery';
 
 const id = Astro.params.id ?? '';
@@ -10,12 +10,12 @@ const photo = /^[0-9A-HJKMNP-TV-Z]{26}$/.test(id) ? await getPublicPhoto(id) : n
 // An empty 404 renders src/pages/404.astro.
 if (!photo) return new Response(null, { status: 404 });
 
-const [categories, defaultSetting] = await Promise.all([listCategories(), getSetting('default_layout')]);
+const [nav, defaultSetting] = await Promise.all([getPublicNav(), getSetting('default_layout')]);
 const first = photo.categories[0] ?? null;
 const category = first ? await getCategoryBySlug(first.slug) : null;
-const photos = category ? await listCategoryPhotos(category.id) : await listAllPhotos();
+const photos = category ? await listCategoryPhotos(category.id) : await listUncategorizedPhotos();
 const defaultLayout = category ? category.defaultLayout : isLayout(defaultSetting) ? defaultSetting : 'rows';
-const galleryUrl = category ? `/c/${category.slug}` : '/all';
+const galleryUrl = category ? `/c/${category.slug}` : '/c/miscellaneous';
 
 const title = photo.title?.trim() || 'Photo';
 ---
@@ -23,9 +23,9 @@ const title = photo.title?.trim() || 'Photo';
 <GalleryPage
   title={`${title} — Jay’s Gallery`}
   description={photo.caption ?? undefined}
-  categories={categories}
-  activeSlug={category?.slug}
-  heading={category?.name ?? 'All photos'}
+  nav={nav}
+  activeSlug={category?.slug ?? 'miscellaneous'}
+  heading={category?.name ?? 'Miscellaneous'}
   headingTag="h2"
   eyebrow={`${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}`}
   photos={photos}

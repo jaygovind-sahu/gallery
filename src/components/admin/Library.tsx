@@ -92,7 +92,7 @@ export default function Library({ photos: initial, categories, locations, filter
   return (
     <div className="flex flex-col gap-5" data-hydrated={hydrated || undefined}>
       <div className="flex flex-wrap items-end gap-3">
-        <Select label="Category" value={filter.category} onChange={(v) => setFilter({ ...filter, category: v })} options={categories} all="All categories" />
+        <Select label="Category" value={filter.category} onChange={(v) => setFilter({ ...filter, category: v })} options={[{ id: '__none', name: 'No category' }, ...categories]} all="All categories" />
         <Select label="Location" value={filter.location} onChange={(v) => setFilter({ ...filter, location: v })} options={locations} all="All locations" />
         <label className="flex flex-col gap-1">
           <span className="text-xs uppercase tracking-wide text-ink-muted">Status</span>

@@ -2,12 +2,12 @@
 // Not found: any unknown URL, and public pages that return an empty 404 (unknown slug, draft or missing photo).
 // The wording is the same in every case, so it never tells a draft apart from a photo that doesn't exist.
 import Base from '../layouts/Base.astro';
-import { listCategories } from '../lib/db';
+import { getPublicNav, type PublicNav } from '../lib/db';
 
-const categories = await listCategories().catch(() => []);
+const nav: PublicNav = await getPublicNav().catch(() => ({ categories: [], miscCount: 0, allCount: 0 }));
 ---
 
-<Base title="Not found — Jay’s Gallery" categories={categories} canonical={false}>
+<Base title="Not found — Jay’s Gallery" nav={nav} canonical={false}>
   <div class="flex flex-col gap-3 pb-8 pt-20 sm:pt-28">
     <p class="eyebrow m-0">Not found</p>
     <h1 class="m-0 font-display text-[42px] font-medium leading-[1.05] tracking-[0.01em] text-ink sm:text-[48px]">Nothing here</h1>

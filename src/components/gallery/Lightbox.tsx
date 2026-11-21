@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import YARL, { useLightboxState } from 'yet-another-react-lightbox';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -105,14 +105,42 @@ function Controls({ open, onToggle }: { open: boolean; onToggle: () => void }) {
         <span className="lightbox-titlebar__meta">{title && location ? `${location} · ${position}` : position}</span>
       </div>
       <InfoPanel photo={photo} open={open} onClose={onToggle} />
+      {!open && <DetailsBar onOpen={onToggle} />}
     </>
+  );
+}
+
+/** Phones, with the sheet closed: the bar below the photo that opens it again, by a tap or a swipe up. */
+function DetailsBar({ onOpen }: { onOpen: () => void }) {
+  const startY = useRef<number | null>(null);
+  return (
+    <button
+      type="button"
+      className="lightbox-details-bar"
+      aria-label="Show details"
+      aria-controls="lightbox-info"
+      onPointerDown={(event) => {
+        // Not a swipe to the next photo, and the finger may leave the bar on the way up.
+        event.stopPropagation();
+        startY.current = event.clientY;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerUp={(event) => {
+        if (startY.current !== null && startY.current - event.clientY > 24) onOpen();
+        startY.current = null;
+      }}
+      onClick={onOpen}
+    >
+      <span className="sheet-handle" aria-hidden="true" />
+      <span className="eyebrow">Details</span>
+    </button>
   );
 }
 
 function InfoButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const label = open ? 'Hide details' : 'Show details';
   return (
-    <button type="button" className="yarl__button" aria-label={label} title={label} aria-pressed={open} aria-controls="lightbox-info" onClick={onToggle}>
+    <button type="button" className="yarl__button lightbox-info-button" aria-label={label} title={label} aria-pressed={open} aria-controls="lightbox-info" onClick={onToggle}>
       <InfoIcon />
     </button>
   );

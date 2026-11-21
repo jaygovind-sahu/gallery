@@ -1,14 +1,16 @@
 ---
 import { env } from 'cloudflare:workers';
 import '../styles/global.css';
-import type { Category } from '../lib/db';
+import NavMenuItem from '../components/NavMenuItem.astro';
+import type { PublicNav } from '../lib/db';
 import { siteOrigin } from '../lib/host';
 
 interface Props {
   title: string;
   description?: string;
-  categories: Category[];
-  /** Slug of the current category (or "all"), for aria-current in the menu. */
+  /** Categories with published photos, the Miscellaneous count and the total, for the header and footer. */
+  nav: PublicNav;
+  /** Slug of the current category ("miscellaneous" for photos in none, "all" for All), for the menus. */
   activeSlug?: string;
   /** Absolute URL, pixel size and alt text of the preview image for shared links. */
   ogImage?: { url: string; width: number; height: number; alt: string } | null;
@@ -19,7 +21,7 @@ interface Props {
 const {
   title,
   description = 'Photography by Jaygovind Sahu: birds, macro, landscape and astro.',
-  categories,
+  nav,
   activeSlug,
   ogImage = null,
   canonical = true,
@@ -27,7 +29,12 @@ const {
 
 const pageUrl = siteOrigin(env.SITE_URL, Astro.url.origin) + Astro.url.pathname;
 
-const links = [...categories.map((c) => ({ href: `/c/${c.slug}`, label: c.name, slug: c.slug })), { href: '/all', label: 'All', slug: 'all' }];
+// Empty categories are already left out of `nav`; Miscellaneous shows only while some photo is in no category.
+const menu = nav.categories.map((c) => ({ href: `/c/${c.slug}`, label: c.name, slug: c.slug, count: c.photoCount }));
+const misc = nav.miscCount > 0 ? { href: '/c/miscellaneous', label: 'Miscellaneous', slug: 'miscellaneous', count: nav.miscCount } : null;
+const hasMenu = menu.length > 0 || misc !== null;
+const inCategories = activeSlug !== undefined && activeSlug !== 'all';
+const footerLinks = [...menu, ...(misc ? [misc] : []), { href: '/all', label: 'All', slug: 'all' }];
 const hasHeaderEnd = Astro.slots.has('header-end');
 const year = new Date().getFullYear();
 ---
@@ -65,36 +72,41 @@ const year = new Date().getFullYear();
     <header id="site-header" class="site-header sticky top-0 z-10 flex items-center justify-between gap-4 px-4 py-4 sm:px-8 sm:py-5">
       <a href="/" class="shrink-0 font-display text-[26px] font-medium leading-none tracking-[0.01em] text-ink">Jay’s Gallery</a>
       <div class="flex items-center gap-3 sm:gap-6">
-        <nav aria-label="Categories" class="hidden gap-6 text-sm sm:flex">
+        <nav aria-label="Main" class="hidden items-center gap-6 text-sm sm:flex">
           {
-            links.map((l) => (
-              <a href={l.href} aria-current={l.slug === activeSlug ? 'page' : undefined} class="nav-link">
-                {l.label}
-              </a>
-            ))
+            hasMenu && (
+              <details class="nav-menu relative" data-menu>
+                <summary class="nav-link flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden" data-active={inCategories ? '' : undefined}>
+                  Categories
+                  <svg class="nav-menu__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </summary>
+                <div class="absolute -left-4 top-full z-20 mt-3.5 flex w-[260px] flex-col rounded-lg border border-divider bg-surface py-2 text-[15px]">
+                  {menu.map((l) => <NavMenuItem href={l.href} label={l.label} count={l.count} current={l.slug === activeSlug} />)}
+                  {misc && menu.length > 0 && <span class="mx-4 my-2 h-px bg-divider" aria-hidden="true" />}
+                  {misc && <NavMenuItem href={misc.href} label={misc.label} count={misc.count} current={activeSlug === misc.slug} />}
+                </div>
+              </details>
+            )
           }
+          <a href="/all" aria-current={activeSlug === 'all' ? 'page' : undefined} class="nav-link">
+            All
+          </a>
         </nav>
         {hasHeaderEnd && <span class="hidden h-5 w-px bg-divider sm:block" aria-hidden="true" />}
         {hasHeaderEnd && <slot name="header-end" />}
-        <details class="relative sm:hidden">
+        <details class="relative sm:hidden" data-menu>
           <summary class="flex cursor-pointer list-none items-center rounded-full p-1.5 text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden" aria-label="Menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
               <path d="M4 8h16M4 16h16" />
             </svg>
           </summary>
-          <nav aria-label="Categories" class="absolute right-0 top-full mt-3 flex min-w-48 flex-col rounded-lg border border-divider bg-surface py-2 text-[15px]">
-            {
-              links.map((l) => (
-                <a
-                  href={l.href}
-                  aria-current={l.slug === activeSlug ? 'page' : undefined}
-                  class:list={['flex items-center justify-between gap-4 px-4 py-2.5 transition-colors hover:text-ink', l.slug === activeSlug ? 'text-ink' : 'text-ink-muted']}
-                >
-                  {l.label}
-                  {l.slug === activeSlug && <span class="size-1.5 rounded-full bg-ink" aria-hidden="true" />}
-                </a>
-              ))
-            }
+          <nav aria-label="Categories" class="absolute right-0 top-full z-20 mt-3 flex w-[250px] flex-col rounded-lg border border-divider bg-surface py-2 text-[15px]">
+            {menu.map((l) => <NavMenuItem href={l.href} label={l.label} count={l.count} current={l.slug === activeSlug} />)}
+            {menu.length > 0 && <span class="mx-4 my-2 h-px bg-divider" aria-hidden="true" />}
+            {misc && <NavMenuItem href={misc.href} label={misc.label} count={misc.count} current={activeSlug === misc.slug} />}
+            <NavMenuItem href="/all" label="All photos" count={nav.allCount} current={activeSlug === 'all'} />
           </nav>
         </details>
       </div>
@@ -113,7 +125,7 @@ const year = new Date().getFullYear();
         <div class="flex flex-col gap-3 text-[13px] sm:items-end">
           <nav aria-label="Footer" class="flex flex-wrap gap-x-5 gap-y-2">
             {
-              links.map((l) => (
+              footerLinks.map((l) => (
                 <a href={l.href} aria-current={l.slug === activeSlug ? 'page' : undefined} class="footer-link">
                   {l.label}
                 </a>
@@ -133,6 +145,20 @@ const year = new Date().getFullYear();
     <script>
       // Slim sticky header: hides on scroll down, returns on scroll up.
       const header = document.getElementById('site-header');
+
+      // The category menus are <details>: close them on a click outside or on Escape.
+      const menus = Array.from(document.querySelectorAll<HTMLDetailsElement>('details[data-menu]'));
+      document.addEventListener('click', (event) => {
+        for (const menu of menus) if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        for (const menu of menus) {
+          if (!menu.open) continue;
+          menu.open = false;
+          menu.querySelector('summary')?.focus();
+        }
+      });
       let last = window.scrollY;
       header?.toggleAttribute('data-scrolled', last > 8);
       let ticking = false;

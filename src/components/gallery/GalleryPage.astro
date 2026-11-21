@@ -5,7 +5,7 @@
  */
 import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
-import type { Category, PublicPhoto } from '../../lib/db';
+import type { PublicNav, PublicPhoto } from '../../lib/db';
 import { altText, derivativeDimensions, resolveLayout, type Layout } from '../../lib/gallery';
 import { siteOrigin } from '../../lib/host';
 import { imageUrl } from '../../lib/images';
@@ -15,7 +15,7 @@ import LayoutToggle from './LayoutToggle';
 interface Props {
   title: string;
   description?: string;
-  categories: Category[];
+  nav: PublicNav;
   activeSlug?: string;
   heading?: string;
   /** Permalink pages put the photo title in the h1 and show the category name as an h2. */
@@ -33,7 +33,7 @@ interface Props {
   ogPhoto?: PublicPhoto | null;
 }
 
-const { title, description, categories, activeSlug, heading, headingTag = 'h1', eyebrow, subline, photos, defaultLayout, galleryUrl, initialPhotoId = null, contextCategory = null, ogPhoto } = Astro.props;
+const { title, description, nav, activeSlug, heading, headingTag = 'h1', eyebrow, subline, photos, defaultLayout, galleryUrl, initialPhotoId = null, contextCategory = null, ogPhoto } = Astro.props;
 const initialLayout = resolveLayout(Astro.url.searchParams.get('layout'), null, defaultLayout);
 const preview = ogPhoto === undefined ? (photos[0] ?? null) : ogPhoto;
 const ogImage = preview
@@ -45,7 +45,7 @@ const ogImage = preview
   : null;
 ---
 
-<Base title={title} description={description} categories={categories} activeSlug={activeSlug} ogImage={ogImage}>
+<Base title={title} description={description} nav={nav} activeSlug={activeSlug} ogImage={ogImage}>
   <LayoutToggle slot="header-end" client:load fallback={defaultLayout} initial={initialLayout} />
   {
     heading ? (

@@ -8,14 +8,20 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 | --- | --- | --- | --- |
 | `/` | `index.astro` | Latest 48 uploads | `settings.default_layout` |
 | `/c/:slug` | `c/[slug].astro` | The category, in its manual order | The category's `default_layout` |
+| `/c/miscellaneous` | `c/miscellaneous.astro` | Published photos in no category, newest upload first (`listUncategorizedPhotos`); a 404 while there are none. The static route wins over `[slug]`, and the slug is reserved (below) | `settings.default_layout` |
 | `/all` | `all.astro` | Every published photo, by `sort_order` | `settings.default_layout` |
 | `/l/:slug` | `l/[slug].astro` | Photos at the location, newest taken first | `settings.default_layout` |
-| `/p/:id` | `p/[id].astro` | Opens the lightbox over the photo's first category (by category position), else `/all`. Server-renders the title, caption and Open Graph tags with the 1600 px image | That gallery's |
+| `/p/:id` | `p/[id].astro` | Opens the lightbox over the photo's first category (by category position), else Miscellaneous. Server-renders the title, caption and Open Graph tags with the 1600 px image | That gallery's |
 
 - **404:** an unknown URL, slug or id, or a draft's permalink, gets [404.astro](../src/pages/404.astro) with status 404. Pages trigger it by returning `new Response(null, { status: 404 })`: Astro renders the 404 page for an empty-bodied 404. A body (like `/img`'s plain text) is sent as is. The wording is the same in every case.
 - Every page renders through [GalleryPage.astro](../src/components/gallery/GalleryPage.astro), which wraps [Base.astro](../src/layouts/Base.astro): header, footer, meta and Open Graph tags, and the header script (hides on scroll down; sets `data-scrolled` once the page has scrolled, which turns the header translucent with a hairline).
 - The heading block takes `heading`, an `eyebrow` (small caps above it: the photo count, plus the region on location pages) and a `subline` (the category description). The home page has none.
 - Each page has two islands: `LayoutToggle` in the header's `header-end` slot, and `Gallery`.
+- **Header and footer menus** come from `getPublicNav()` in `db.ts`, which every page loads and passes down as `nav`: the categories with published photos (empty ones are left out), the count of published photos in no category, and the total.
+  - Desktop: a **Categories** `<details>` menu and an **All** link. The menu lists each category with its count ([NavMenuItem.astro](../src/components/NavMenuItem.astro)), a dot on the current one, then Miscellaneous after a hairline when its count is above 0. On a category page the summary gets `data-active`, which underlines it like a current link.
+  - Phones: one `<details>` menu with the same rows, a hairline, Miscellaneous, then "All photos" with the total.
+  - The header script closes an open menu on a click outside it or on Escape. The footer lists the same categories, Miscellaneous and All.
+  - **Reserved slug:** `miscellaneous` (`RESERVED_CATEGORY_SLUGS` in `slug.ts`). Creating a category with that name gives it `miscellaneous-2`, and a PATCH to that slug is a 409 `slug_taken`.
 - **Open Graph** (in `Base.astro`): canonical link and `og:url` from `SITE_URL`, `og:site_name`, title, description, and a preview image at 1600 px with its size and alt text. `GalleryPage` takes `ogPhoto`, defaulting to the first photo on the page. Category pages pass their cover if it's public, the permalink passes its photo. Without a photo the card is `summary`. The 404 page has no canonical or `og:url`.
 
 ## Layouts
@@ -44,10 +50,13 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 - [Lightbox.tsx](../src/components/gallery/Lightbox.tsx) wraps `yet-another-react-lightbox` with the Zoom and Fullscreen plugins. Sources come from `lightboxSources` (1600 / 2400).
 - **Real size, never enlarged:** `carousel.imageProps` caps each photo at its largest file's pixels divided by `devicePixelRatio` (`realSizeLimit` in `gallery.ts`), so on a big high-resolution screen it sits smaller, with more black around it, rather than going soft. Zoom's `maxZoomPixelRatio` is `1 / devicePixelRatio`, so zoom also stops at one image pixel per screen pixel; where the photo is already at that size the zoom buttons are disabled. `useDevicePixelRatio` follows browser zoom and moves between monitors.
 - **Info panel (spec sheet):** [InfoPanel.tsx](../src/components/gallery/InfoPanel.tsx) is our own component, rendered through `render.controls`.
-  - It opens with every photo (`Lightbox` sets it open whenever the lightbox opens); `i` or the info button hides and shows it, and a hide lasts until the lightbox closes.
+  - It opens with every photo (`Lightbox` sets it open whenever the lightbox opens); `i` or the info button hides and shows it, and a hide lasts until the lightbox closes. It's black like the lightbox, with a hairline on the edge facing the photo.
   - Content: title, caption, the exposure as large figures (`exposureFigures` in `exif-format.ts`: focal length, aperture shown as italic ƒ, shutter, ISO), then camera, lens, exposure compensation, date and a location link, then category chips. Missing values are left out, and the exposure block goes when there are none.
   - Desktop: a 340 px side panel; `.lightbox--info .yarl__container` shrinks so the photo fits beside it. The figures are a 2×2 grid.
   - Phones: a bottom sheet (up to 60vh) with the figures in one row. A `ResizeObserver` copies the sheet's height into `--info-sheet-height` on the container, whose bottom padding follows it, so the photo fits above the sheet.
+    - Drag to close: pointer handlers on the handle (a button that also closes on a tap) and on the title block. The sheet follows the finger with an inline `transform`; past 96 px, or on a quick flick, it slides away and closes, otherwise it snaps back. Those two areas are `touch-action: none`, so the browser doesn't scroll from them.
+    - Closed: `DetailsBar` in `Lightbox.tsx` sits in the 56 px band below the photo with the same handle and a "Details" label; a tap or a swipe up opens the sheet. It stops pointer-downs so a swipe on it doesn't change photo.
+    - The toolbar's i button (`.lightbox-info-button`) is hidden below 768 px; `i` on a keyboard still works.
   - Pointer-downs inside the panel don't reach the lightbox (`stopNavigationEventsPropagation`), so scrolling the sheet never swipes or pull-closes. A native wheel listener stops wheel events too: the lightbox's own listener would cancel them for scroll-to-zoom, and the panel couldn't scroll. Keys aren't stopped, so `i`, the arrows and Esc work with focus in the panel.
 - **Title bar and reserved band:** `render.controls` also draws the title bar (title, location, "3 / 18") top left. CSS padding on `.yarl__container` keeps a band free at the top (and gutters for the arrows on desktop); the library measures the container minus its padding, so the image fits the space left and no control sits on it.
 - **Icons and touch:** the toolbar and arrows use our thin outline icons (`render.icon*`). On touch-first screens (`(hover: none) and (pointer: coarse)`) the arrow and zoom buttons are hidden; swipe and pinch do the job.
@@ -77,5 +86,5 @@ They deter, they don't prevent:
   - No gradients, and no borders or shadows on photos.
   - `prefers-reduced-motion` is respected globally.
   - No third-party scripts or fonts.
-- **Shared classes** in `global.css`: `.eyebrow` (11 px tracked small caps in `ink-muted`, for labels), `.site-header`, `.nav-link`, `.footer-link`, `.lightbox-titlebar`, `.info-panel__details`.
+- **Shared classes** in `global.css`: `.eyebrow` (11 px tracked small caps in `ink-muted`, for labels), `.site-header`, `.nav-link`, `.footer-link`, `.lightbox-titlebar`, `.info-panel__details`, `.sheet-handle`, `.nav-menu`.
 - Full direction, sizes and spacing: [DESIGN.md → Look and feel](../docs/DESIGN.md#public-gallery).

@@ -237,7 +237,7 @@ On iOS, the photo picker usually converts HEIC to JPEG when the input doesn't ac
 
 **Admin pages**
 
-- `/admin` — library of all photos, drafts included. Filters: category, location, published/draft. Multi-select bulk actions: publish, unpublish, add/remove category, set location, delete.
+- `/admin` — library of all photos, drafts included. Filters: category (or "No category"), location, published/draft. Multi-select bulk actions: publish, unpublish, add/remove category, set location, delete.
 - `/admin/upload` — the flow above.
 - `/admin/photos/:id` — large preview plus every field: title, caption, date, location, categories, EXIF values (editable when missing), watermark on/off, published. Buttons: Replace original, Delete (with confirm), View on site.
 - `/admin/categories` — create, rename, describe, reorder categories; per category set the default layout and the cover photo; open a category to drag-reorder its photos (touch-friendly, e.g. dnd-kit).
@@ -313,9 +313,10 @@ The public site is server-rendered Astro with one interactive React island per g
 | --- | --- |
 | `/` | header, then straight into the latest photos in the gallery layout; categories live in the header menu |
 | `/c/:slug` | one category in its layout, manual order |
+| `/c/miscellaneous` | published photos in no category, newest first; the slug is reserved, and the page is a 404 while there are none |
 | `/all` | every published photo, by `sort_order` |
 | `/l/:slug` | every published photo at a location, newest first |
-| `/p/:id` | photo permalink: opens the lightbox over its category (or `/all`); server-renders title, caption and Open Graph tags so shared links preview well |
+| `/p/:id` | photo permalink: opens the lightbox over its category (or Miscellaneous); server-renders title, caption and Open Graph tags so shared links preview well |
 | `/img/...` | image route (Image delivery) |
 
 The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomain (a one-line change in that separate repo).
@@ -354,13 +355,13 @@ The main site jaygovindsahu.com gets a plain "Gallery" nav link to this subdomai
 - **Direction: minimal dark.** The photos are the only color on the page; chrome is quiet, thin and sparse. Dark only in v1 (no light theme).
 - **Palette** (CSS variables): background `#0f0f10`, raised surfaces `#18181a`, dividers `#2a2a2d`, primary text `#ece9e4` (warm off-white), secondary text `#8f8c87`. No accent color: active states (current category, selected layout icon) use primary text vs. secondary. No gradients, borders or shadows on photos.
 - **Type: condensed display + sans, one family.** Barlow Condensed (500) for the site name, page titles and photo titles; Barlow for menus, locations, EXIF and admin UI. Self-host via `@fontsource` so the CSP stays self-only. Sizes: site name 26 px, page title 42–48 px, tile title 17 px, tile location 12 px, EXIF 13 px. (The condensed face runs about a sixth larger than the old serif to read at the same weight on the page.)
-- **Header**: the site name, "Jay’s Gallery", in the display face on the left; category links (Birds, Macro, Landscape, Astro, Family, All, the current one underlined with a hairline) and the layout toggle on the right; collapses to a menu on phones. Slim, sticky, hides on scroll down and returns on scroll up; once scrolled it turns translucent with a hairline under it.
+- **Header**: the site name, "Jay’s Gallery", in the display face on the left; on the right a **Categories** menu, an **All** link and the layout toggle. The menu lists the categories that have published photos, in their order, each with its photo count and a dot on the current one, then Miscellaneous (photos in no category) after a hairline when there are any; the Categories label is underlined with a hairline on a category page. On phones everything is in one menu, ending with "All photos" and its count. Slim, sticky, hides on scroll down and returns on scroll up; once scrolled it turns translucent with a hairline under it.
 - **Home page**: no hero and no intro block — the header, then straight into the latest photos in the gallery layout.
 - **Category page**: photo count in small caps, category name in the display face, the optional one-line description in secondary text, then the gallery. Location pages put the region beside the count.
 - **Captions under every tile** in all three layouts: title in the display face (17 px, primary) and location in sans (12 px, secondary), each one line, truncated with an ellipsis. Untitled photo → location only. Captions take a fixed height (~44 px) so justified rows stay aligned; the layout height calculation must include it (custom render in `react-photo-album`).
 - **Spacing**: 8 px gutters on phones, 12 px on desktop; page side padding 16 px phone, 32 px desktop; generous space above page titles.
 - **Hover and motion**: tiles lift brightness slightly on hover (no zoom, no movement); images fade in over their ThumbHash in ~200 ms; respect `prefers-reduced-motion`.
-- **Lightbox**: pure black background, image as large as fits, but never enlarged past its real pixels on the visitor's screen (largest file ÷ device pixel ratio; zoom stops there too), below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel is open when a photo opens: a side panel on the right on desktop, a bottom sheet on phones, and the photo is fitted into the space beside or above it. Display-face title, exposure in large display-face figures between hairlines, labelled sans details.
+- **Lightbox**: pure black background, image as large as fits, but never enlarged past its real pixels on the visitor's screen (largest file ÷ device pixel ratio; zoom stops there too), below a slim band that holds the title, location and position (e.g. "3 / 18") on the left and the controls on the right, so nothing sits on the photo; on touch screens swipe and pinch replace the arrow and zoom buttons. Info panel is open when a photo opens: a black side panel with a hairline edge on the right on desktop, a black bottom sheet on phones, and the photo is fitted into the space beside or above it. On phones the sheet has a working drag handle (drag down to close); once closed, a Details bar with the handle in the band below the photo opens it again (tap or swipe up), and the toolbar's i button is desktop-only. Display-face title, exposure in large display-face figures between hairlines, labelled sans details.
 - **Footer**: above a hairline, the site name, small © Jaygovind Sahu, the category links and a link back to jaygovindsahu.com.
 - **Accessible**: alt text = title, else "&lt;category&gt; photo, &lt;location&gt;, &lt;date&gt;"; text contrast ≥ 4.5:1 on the dark background; visible focus rings; lightbox fully keyboard-operable.
 

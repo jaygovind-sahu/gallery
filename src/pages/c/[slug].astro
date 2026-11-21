@@ -1,10 +1,10 @@
 ---
 // One category in its manual order, in the owner's default layout for it.
 import GalleryPage from '../../components/gallery/GalleryPage.astro';
-import { getCategoryBySlug, getPublicCoverPhotoId, listCategories, listCategoryPhotos } from '../../lib/db';
+import { getCategoryBySlug, getPublicCoverPhotoId, getPublicNav, listCategoryPhotos } from '../../lib/db';
 
 const slug = Astro.params.slug ?? '';
-const [category, categories] = await Promise.all([getCategoryBySlug(slug), listCategories()]);
+const [category, nav] = await Promise.all([getCategoryBySlug(slug), getPublicNav()]);
 // An empty 404 renders src/pages/404.astro.
 if (!category) return new Response(null, { status: 404 });
 
@@ -16,7 +16,7 @@ const countLabel = `${category.photoCount} ${category.photoCount === 1 ? 'photo'
 <GalleryPage
   title={`${category.name} — Jay’s Gallery`}
   description={category.description ?? undefined}
-  categories={categories}
+  nav={nav}
   activeSlug={category.slug}
   heading={category.name}
   eyebrow={countLabel}

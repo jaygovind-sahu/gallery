@@ -36,12 +36,14 @@ test.describe('public gallery', () => {
   const ids: string[] = [];
   let a = '';
   let b = '';
+  let c = '';
 
   test.beforeAll(async ({ request }) => {
     const tag = Date.now().toString(36);
     a = await createPhoto(request, `gallery-a-${tag}`, { camera: 'Nikon Z50II', lens: 'Tamron 50-400mm', focalLengthMm: 400, aperture: 6.3, shutterS: 1 / 2000, iso: 1600 });
     b = await createPhoto(request, `gallery-b-${tag}`, { title: null });
-    ids.push(a, b);
+    c = await createPhoto(request, `gallery-c-${tag}`, { categoryIds: [] });
+    ids.push(a, b, c);
   });
 
   test.afterAll(async ({ request }) => {
@@ -162,6 +164,32 @@ test.describe('public gallery', () => {
     await page.keyboard.press('i');
     await expect(info).toBeHidden();
 
+    const bar = lightbox.locator('.lightbox-details-bar');
+    if (testInfo.project.name === 'phone') {
+      // Phones: no i button at the top. The Details bar below the photo opens the sheet; dragging the
+      // sheet down by its handle closes it again.
+      await expect(lightbox.locator('.lightbox-info-button')).toBeHidden();
+      await expect(bar).toBeVisible();
+      await bar.click();
+      await expect(info).toBeVisible();
+      await expect(bar).toHaveCount(0);
+      // Let it finish sliding up before grabbing the handle.
+      await expect.poll(() => info.evaluate((el) => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+      const handle = await info.locator('.info-panel__grabber').boundingBox();
+      if (!handle) throw new Error('no drag handle');
+      const x = handle.x + handle.width / 2;
+      const y = handle.y + handle.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 160, { steps: 8 });
+      await page.mouse.up();
+      await expect(info).toBeHidden();
+      await expect(bar).toBeVisible();
+    } else {
+      await expect(lightbox.locator('.lightbox-info-button')).toBeVisible();
+      await expect(bar).toBeHidden();
+    }
+
     await page.goBack();
     await expect(lightbox).toHaveCount(0);
     await expect(page).toHaveURL(/\/c\/birds$/);
@@ -186,6 +214,62 @@ test.describe('public gallery', () => {
     await page.keyboard.press('Escape');
     await expect(lightbox).toHaveCount(0);
     await expect(page).toHaveURL(/\/c\/birds$/);
+  });
+
+  test('header: one Categories menu with the non-empty categories, then Miscellaneous for photos in none', async ({ page, request }, testInfo) => {
+    const tag = Date.now().toString(36);
+    // A category with no published photos stays out of the menu.
+    const empty = await request.post('/api/admin/categories', { data: { name: `Empty ${tag}` } });
+    expect(empty.status()).toBe(201);
+    const emptyCategory = ((await empty.json()) as { category: { id: string; slug: string } }).category;
+    // "miscellaneous" is reserved for photos in no category, so a real category called that gets another address.
+    const named = await request.post('/api/admin/categories', { data: { name: 'Miscellaneous' } });
+    expect(named.status()).toBe(201);
+    const namedCategory = ((await named.json()) as { category: { id: string; slug: string } }).category;
+    expect(namedCategory.slug).not.toBe('miscellaneous');
+
+    try {
+      const phone = testInfo.project.name === 'phone';
+      await open(page, '/c/birds');
+      const menu = phone ? page.locator('summary[aria-label="Menu"]').locator('..') : page.locator('details.nav-menu');
+      await menu.locator('summary').click();
+      const panel = phone ? menu.getByRole('navigation', { name: 'Categories' }) : menu;
+      await expect(panel.getByRole('link', { name: /^Birds/ })).toHaveAttribute('aria-current', 'page');
+      await expect(panel.getByRole('link', { name: /^Birds/ })).toContainText(/\d+$/);
+      await expect(panel.getByRole('link', { name: new RegExp(`^Empty ${tag}`) })).toHaveCount(0);
+      await expect(panel.locator(`a[href="/c/${namedCategory.slug}"]`)).toHaveCount(0);
+      if (phone) await expect(panel.getByRole('link', { name: /^All photos/ })).toHaveAttribute('href', '/all');
+      else {
+        await expect(menu.locator('summary')).toHaveAttribute('data-active', '');
+        // A click elsewhere closes it.
+        await page.locator('main').click({ position: { x: 5, y: 5 } });
+        await expect(menu).not.toHaveAttribute('open');
+        await menu.locator('summary').click();
+      }
+
+      await panel.getByRole('link', { name: /^Miscellaneous/ }).click();
+      await expect(page).toHaveURL(/\/c\/miscellaneous$/);
+      await page.locator('[data-gallery][data-hydrated]').waitFor();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Miscellaneous');
+      await expect(tile(page, c)).toBeVisible();
+      await expect(tile(page, a)).toHaveCount(0);
+
+      // A photo in no category opens over Miscellaneous.
+      await open(page, `/p/${c}`);
+      await expect(page.locator('.yarl__root')).toBeVisible();
+      await expect(page.locator('h2').filter({ hasText: /^Miscellaneous$/ })).toHaveCount(1);
+      await page.keyboard.press('Escape');
+      await expect(page).toHaveURL(/\/c\/miscellaneous$/);
+
+      // The admin Library's "No category" filter finds it too.
+      const res = await request.get('/api/admin/photos?category=__none');
+      const listed = ((await res.json()) as { photos: { id: string }[] }).photos.map((p) => p.id);
+      expect(listed).toContain(c);
+      expect(listed).not.toContain(a);
+    } finally {
+      await request.delete(`/api/admin/categories/${emptyCategory.id}`);
+      await request.delete(`/api/admin/categories/${namedCategory.id}`);
+    }
   });
 
   test('tiles show in every layout when images load before hydration or fail once', async ({ page }) => {

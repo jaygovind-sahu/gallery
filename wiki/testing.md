@@ -13,6 +13,7 @@ What has to be tested is set by [DESIGN.md → Testing checklist](../docs/DESIGN
 | `exif-format.test.ts` | Shutter, aperture, exposure compensation, the EXIF line, the info panel's exposure figures, dates |
 | `gallery.test.ts` | Layout resolution, alt text, srcset sources, the lightbox's real-size cap, placeholders and captions |
 | `images.test.ts` | Size allowlist, version parsing, URLs, format negotiation, R2 and cache keys, dimension reconciliation |
+| `slug.test.ts` | Slugify; the reserved `miscellaneous` category slug |
 | `order.test.ts` | Fractional positions, renumbering, appending |
 | `captions.test.ts` | What a caption write means for the shown caption; the re-run merge rule; shown-tone fallback; hashtag normalising |
 | `ai.test.ts` | The text sent to the model (place and month, never time or coordinates); tidying a model's answer; schema parity; blind-comparison tokens and tally; nearest location from GPS; production hostname and site origin |
@@ -32,10 +33,10 @@ What has to be tested is set by [DESIGN.md → Testing checklist](../docs/DESIGN
 | Spec | Covers |
 | --- | --- |
 | `upload.spec.ts` | Batch upload with shared fields; stored EXIF and dimensions; browser-side rejection of > 100 MB and non-images |
-| `admin.spec.ts` | Library filters and bulk actions; edit, replace (version bump), delete; categories (rename, reorder, cover, drag-reorder); locations (merge, delete) |
+| `admin.spec.ts` | Library filters (including "No category") and bulk actions; edit, replace (version bump), delete; categories (rename, reorder, cover, drag-reorder); locations (merge, delete) |
 | `images.spec.ts` | AVIF/WebP per size, immutable caching, portrait stays portrait, no metadata, watermark (remote only), 404 cases |
 | `ai.spec.ts` | Suggest on an upload card and on the edit page (against `AI_MOCK=1`); saved captions and which one is public; re-run keeps edits; blind comparison counts a pick; duplicate warning; location from GPS; draft default and saving edits after upload; AI settings |
-| `gallery.spec.ts` | Photos on category / all / home / location pages; three layouts, persistence and `?layout=`; the lightbox never enlarging a photo past real size (1× and 2× screens); lightbox and `/p/:id` history; the spec sheet opening with each photo, its figures, never covering the photo, and `i`; tiles loading before hydration or after a failure; deterrents; unpublish → 404 page; unknown pages → 404 page; security headers; a category's Open Graph image is its cover, never a draft |
+| `gallery.spec.ts` | Photos on category / all / home / location pages; three layouts, persistence and `?layout=`; the lightbox never enlarging a photo past real size (1× and 2× screens); lightbox and `/p/:id` history; the spec sheet opening with each photo, its figures, never covering the photo, and `i`; on phones the Details bar and dragging the sheet closed; the header's Categories menu leaving out empty categories, Miscellaneous and its page, and a reserved-slug category; tiles loading before hydration or after a failure; deterrents; unpublish → 404 page; unknown pages → 404 page; security headers; a category's Open Graph image is its cover, never a draft |
 
 ### Writing e2e tests that don't flake
 

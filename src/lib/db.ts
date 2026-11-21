@@ -9,7 +9,7 @@ import { TONES, normalizeHashtags, resolveCaptionWrite, type Caption, type Tone 
 import type { LocationCentroid } from './geo';
 import { originalKey, type UploadMime } from './images';
 import { positionBetween, renumber } from './order';
-import { slugify } from './slug';
+import { isReservedCategorySlug, slugify } from './slug';
 import type { BulkPhotoInput, CreatePhotoInput, PatchPhotoInput } from './schemas';
 
 export type Layout = 'rows' | 'masonry' | 'grid';
@@ -61,7 +61,27 @@ const CATEGORY_SELECT = `
            WHERE pc.category_id = c.id AND p.status = 'ready' AND p.published = 1) AS photo_count
     FROM categories c`;
 
-/** All categories in their manual order, for the header menu. */
+/** What the public header and footer list: categories with published photos, and the counts beside them. */
+export interface PublicNav {
+  /** In manual order; empty categories are left out. */
+  categories: Category[];
+  /** Published photos in no category; the Miscellaneous entry shows only when this is above 0. */
+  miscCount: number;
+  /** Every published photo. */
+  allCount: number;
+}
+
+export async function getPublicNav(): Promise<PublicNav> {
+  const [categories, counts] = await Promise.all([
+    listCategories(),
+    db()
+      .prepare(`SELECT COUNT(*) AS all_count, SUM(CASE WHEN ${NOT_IN_ANY_CATEGORY} THEN 1 ELSE 0 END) AS misc_count FROM photos p WHERE ${PUBLIC_WHERE}`)
+      .first<{ all_count: number; misc_count: number | null }>(),
+  ]);
+  return { categories: categories.filter((c) => c.photoCount > 0), miscCount: counts?.misc_count ?? 0, allCount: counts?.all_count ?? 0 };
+}
+
+/** All categories in their manual order, empty ones included (admin, and the source of `getPublicNav`). */
 export async function listCategories(): Promise<Category[]> {
   const { results } = await db().prepare(`${CATEGORY_SELECT} ORDER BY c.position`).all<CategoryRow>();
   return results.map(toCategory);
@@ -146,6 +166,11 @@ interface PublicPhotoRow {
 
 const PUBLIC_WHERE = "p.status = 'ready' AND p.published = 1";
 
+/** The admin Library's "No category" filter value. */
+export const NO_CATEGORY = '__none';
+/** Photos in no category: the public Miscellaneous page and the admin "No category" filter. */
+const NOT_IN_ANY_CATEGORY = 'NOT EXISTS (SELECT 1 FROM photo_categories x WHERE x.photo_id = p.id)';
+
 /** Columns are listed explicitly so a new private column can never leak by accident. */
 const PUBLIC_PHOTO_SELECT = `
   SELECT p.id, p.version, p.width, p.height, p.placeholder, p.title, p.caption, p.taken_at,
@@ -210,6 +235,14 @@ export async function listCategoryPhotos(categoryId: string): Promise<PublicPhot
 export async function listAllPhotos(): Promise<PublicPhoto[]> {
   const { results } = await db()
     .prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} ORDER BY p.sort_order, p.id`)
+    .all<PublicPhotoRow>();
+  return results.map(toPublicPhoto);
+}
+
+/** Published photos in no category (the Miscellaneous page), newest upload first: there's no manual order. */
+export async function listUncategorizedPhotos(): Promise<PublicPhoto[]> {
+  const { results } = await db()
+    .prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} AND ${NOT_IN_ANY_CATEGORY} ORDER BY p.created_at DESC, p.id DESC`)
     .all<PublicPhotoRow>();
   return results.map(toPublicPhoto);
 }
@@ -447,6 +480,7 @@ export async function getAdminPhoto(id: string): Promise<AdminPhoto | null> {
 }
 
 export interface AdminPhotoFilter {
+  /** A category id, or `NO_CATEGORY` for photos in none. */
   categoryId?: string;
   locationId?: string;
   /** 'published' | 'draft' (ready, unpublished) | 'uploading' */
@@ -457,7 +491,9 @@ export interface AdminPhotoFilter {
 export async function listAdminPhotos(filter: AdminPhotoFilter = {}): Promise<AdminPhoto[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
-  if (filter.categoryId) {
+  if (filter.categoryId === NO_CATEGORY) {
+    where.push(NOT_IN_ANY_CATEGORY);
+  } else if (filter.categoryId) {
     where.push('EXISTS (SELECT 1 FROM photo_categories x WHERE x.photo_id = p.id AND x.category_id = ?)');
     binds.push(filter.categoryId);
   }
@@ -998,6 +1034,7 @@ async function uniqueSlug(table: 'categories' | 'locations', base: string): Prom
   const root = base || 'item';
   for (let n = 1; n < 100; n++) {
     const candidate = n === 1 ? root : `${root}-${n}`;
+    if (table === 'categories' && isReservedCategorySlug(candidate)) continue;
     const row = await db().prepare(`SELECT 1 AS x FROM ${table} WHERE slug = ?`).bind(candidate).first();
     if (!row) return candidate;
   }
@@ -1005,6 +1042,7 @@ async function uniqueSlug(table: 'categories' | 'locations', base: string): Prom
 }
 
 export async function slugTaken(table: 'categories' | 'locations', slug: string, exceptId: string): Promise<boolean> {
+  if (table === 'categories' && isReservedCategorySlug(slug)) return true;
   const row = await db().prepare(`SELECT 1 AS x FROM ${table} WHERE slug = ? AND id <> ?`).bind(slug, exceptId).first();
   return Boolean(row);
 }

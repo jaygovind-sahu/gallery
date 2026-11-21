@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { stopNavigationEventsPropagation } from 'yet-another-react-lightbox';
 import type { PublicPhoto } from '../../lib/db';
 import { cleanLens, exposureFigures, formatExposureComp, formatTakenAt } from '../../lib/exif-format';
@@ -15,6 +15,10 @@ const { onPointerDown } = stopNavigationEventsPropagation();
 /** Wheel turns scroll the panel too. The lightbox's own native listener would cancel them (scroll-to-zoom). */
 const keepWheel = (event: WheelEvent) => event.stopPropagation();
 
+/** A drag down past this (or a quick flick) closes the phone sheet; less snaps it back. */
+const CLOSE_DISTANCE = 96;
+const FLICK_SPEED = 0.5; // px per ms
+
 /**
  * The spec sheet: title and caption, the exposure as large figures, then camera, lens, date, location and
  * category chips. A side panel on desktop, a bottom sheet on phones.
@@ -26,6 +30,47 @@ export default function InfoPanel({ photo, open, onClose }: Props) {
   const camera = photo.camera?.trim() || null;
   const lens = cleanLens(photo.lens);
   const comp = formatExposureComp(photo.exposureComp);
+
+  // Phones: drag the sheet down by its handle or title to close it. The sheet follows the finger; on release
+  // it either slides away or snaps back. A drag that moved suppresses the handle's click.
+  const drag = useRef<{ pointerId: number; startY: number; startTime: number; dy: number } | null>(null);
+  const moved = useRef(false);
+  const onDragStart = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!open || window.matchMedia('(min-width: 768px)').matches) return;
+    drag.current = { pointerId: event.pointerId, startY: event.clientY, startTime: event.timeStamp, dy: 0 };
+    moved.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onDragMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    const el = ref.current;
+    if (!d || d.pointerId !== event.pointerId || !el) return;
+    d.dy = Math.max(0, event.clientY - d.startY);
+    if (d.dy > 4) moved.current = true;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${d.dy}px)`;
+  };
+  const onDragEnd = (event: ReactPointerEvent<HTMLElement>) => {
+    const d = drag.current;
+    const el = ref.current;
+    if (!d || d.pointerId !== event.pointerId || !el) return;
+    drag.current = null;
+    el.style.transition = '';
+    const fast = d.dy / Math.max(1, event.timeStamp - d.startTime) > FLICK_SPEED;
+    if (d.dy > CLOSE_DISTANCE || (fast && d.dy > 24)) {
+      // Slide on down from where the finger left it; the closed state's CSS takes over from there.
+      el.style.transform = 'translateY(100%)';
+      onClose();
+    } else {
+      el.style.transform = '';
+    }
+  };
+  const dragHandlers = { onPointerDown: onDragStart, onPointerMove: onDragMove, onPointerUp: onDragEnd, onPointerCancel: onDragEnd };
+
+  // Once closed, the stylesheet places the sheet; drop the inline transform a drag left behind.
+  useEffect(() => {
+    if (!open && ref.current) ref.current.style.transform = '';
+  }, [open]);
 
   useEffect(() => {
     const el = ref.current;
@@ -54,9 +99,17 @@ export default function InfoPanel({ photo, open, onClose }: Props) {
       className="info-panel"
       onPointerDown={onPointerDown}
     >
-      <span className="info-panel__grabber" aria-hidden="true" />
+      <button
+        type="button"
+        className="info-panel__grabber info-panel__drag"
+        aria-label="Hide details"
+        onClick={() => (moved.current ? (moved.current = false) : onClose())}
+        {...dragHandlers}
+      >
+        <span className="sheet-handle" aria-hidden="true" />
+      </button>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1.5 md:gap-4">
+        <div className="info-panel__drag flex min-w-0 flex-col gap-1.5 md:gap-4" {...dragHandlers}>
           <h2 className="m-0 font-display text-[26px] font-medium leading-[1.1] tracking-[0.01em] text-ink md:text-[30px]">{photo.title?.trim() || 'Untitled'}</h2>
           {photo.caption && <p className="m-0 text-[14px] leading-[1.55] text-ink md:text-[15px] md:leading-relaxed">{photo.caption}</p>}
         </div>
