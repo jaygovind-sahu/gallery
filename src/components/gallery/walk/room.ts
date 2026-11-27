@@ -48,11 +48,15 @@ import {
   easeOutQuart,
   focusDistance,
   framedSize,
+  headingTowards,
+  lookSlot,
   nearestEquivalent,
   photoSize,
   planRoom,
   ROOM,
+  smoothDamp,
   wrapAngle,
+  wrapSigned,
   type Rect,
   type Wall,
 } from '../../../lib/walk';
@@ -134,6 +138,15 @@ const WALK = {
   tauReduced: 0.12,
   /** Moves longer than this (radians round the ring) cut through a quick fade instead of gliding. */
   jump: 1.6,
+  /**
+   * Looking round: `rest` ms after the last wheel, drag or key, with under `settle` metres left to glide, the
+   * visitor turns to face the nearest print, on either wall. The spring's smoothing times (s) for that turn
+   * and for turning back on walking on.
+   */
+  rest: 300,
+  settle: 0.5,
+  turnTo: 0.42,
+  turnBack: 0.2,
 };
 
 /** Texture levels: the ThumbHash, then real derivatives. Only sizes the tiles and lightbox already use. */
@@ -483,16 +496,34 @@ export function createRoom(
   // ── Camera ─────────────────────────────────────────────────────────────────────────────────────────────
   let portrait = false;
   const tau = options.reducedMotion ? WALK.tauReduced : WALK.tau;
+  /** Facing along the corridor, turned a little towards the inner wall. */
+  const aheadHeading = (a: number) => a - Math.PI / 2 + (portrait ? WALK.yawPortrait : WALK.yaw);
+  // Looking round. A visitor who stops walking turns to face the print nearest them (`lookSlot`), on either
+  // wall, and turns back to the corridor as soon as they walk on. `look` is that turn, on top of the heading
+  // ahead, moved by a spring (`lookSpeed`) so it eases in and out. Only walking starts it (`lookArmed`), so
+  // going back to walking from a print doesn't turn straight back to that print. Never with reduced motion.
+  let look = 0;
+  let lookSpeed = 0;
+  let lookK: number | null = null;
+  let lookArmed = false;
+  let lastWalked = -Infinity;
+  const faceAhead = () => {
+    look = lookSpeed = 0;
+    lookK = null;
+    lookArmed = false;
+  };
+  /** Any wheel, drag, key or map move that walks. */
+  const walked = () => {
+    lookArmed = true;
+    lastWalked = performance.now();
+  };
   const walkPose = (a: number): Pose => ({
     angle: a,
     radius: plan.walkRadius,
     y: ROOM.eyeY,
-    heading: a - Math.PI / 2 + (portrait ? WALK.yawPortrait : WALK.yaw),
+    heading: aheadHeading(a) + look,
     pitch: WALK.pitch,
   });
-  /** The heading that looks from (angle, radius) towards a point. */
-  const headingTowards = (angle: number, radius: number, tx: number, tz: number) =>
-    Math.atan2(-(tx - radius * Math.sin(angle)), -(tz - radius * Math.cos(angle)));
   /** On arrival: facing the title wall, with the corridor curving away to the left. */
   const introPose = (): Pose => {
     const t = plan.titleAngle;
@@ -641,6 +672,7 @@ export function createRoom(
     mode = 'walk';
     focusK = null;
     a = aTarget = angle;
+    faceAhead();
     glideFrom(800);
     if (wasFocus) cb.onFocus(null);
     schedule();
@@ -657,6 +689,7 @@ export function createRoom(
     if (mode === 'dive') return;
     leave();
     aTarget += distance / plan.walkRadius;
+    walked();
     moved();
   };
 
@@ -945,6 +978,27 @@ export function createRoom(
     return bestK;
   };
 
+  /** While walking: turn to the nearest print once the visitor has stood still a moment, and back on walking. */
+  const turnHead = (dt: number) => {
+    const walking =
+      drag !== null || glide !== null || now - lastWalked < WALK.rest || Math.abs(aTarget - a) * plan.walkRadius > WALK.settle;
+    if (walking) lookK = null;
+    // The print by where the visitor will stop: the turn starts in the last of the glide.
+    else if (lookK === null && lookArmed && !options.reducedMotion) lookK = lookSlot(plan, aTarget);
+    let goal = 0;
+    if (lookK !== null) {
+      const { r } = surface[lookK]!;
+      const angle = plan.slots[lookK]!.angle;
+      goal = wrapSigned(headingTowards(a, plan.walkRadius, r * Math.sin(angle), r * Math.cos(angle)) - aheadHeading(a));
+    }
+    if (look === goal && lookSpeed === 0) return;
+    [look, lookSpeed] = smoothDamp(look, lookSpeed, goal, lookK === null ? WALK.turnBack : WALK.turnTo, dt);
+    if (Math.abs(goal - look) < 1e-4 && Math.abs(lookSpeed) < 1e-3) {
+      look = goal;
+      lookSpeed = 0;
+    }
+  };
+
   let last = now;
   let currentPhoto = -1;
   let hovered: number | null = null;
@@ -958,6 +1012,7 @@ export function createRoom(
     if (mode === 'walk') {
       a += (aTarget - a) * (1 - Math.exp(-dt / tau));
       if (Math.abs(aTarget - a) < 1e-6) a = aTarget;
+      turnHead(dt);
     }
     const live = mode === 'walk' ? walkPose(a) : target;
     let next = live;
@@ -1026,6 +1081,7 @@ export function createRoom(
       }
       if (mode === 'intro') toWalk(pose.angle);
       aTarget += nextFrom(aTarget + ahead, dir).d;
+      walked();
     },
     focusPhoto(photoIndex) {
       if (photoIndex < 0 || photoIndex >= count) return;
@@ -1052,11 +1108,14 @@ export function createRoom(
         focusK = null;
         cutTo(() => {
           a = aTarget = to;
+          faceAhead();
+          walked();
         });
         return;
       }
       leave();
       aTarget = to;
+      walked();
     },
     stepIn(photoIndex, rect, done) {
       if (paused || photoIndex < 0 || photoIndex >= count) return;
