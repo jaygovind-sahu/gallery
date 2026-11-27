@@ -16,7 +16,7 @@ What has to be tested is set by [DESIGN.md → Testing checklist](../docs/DESIGN
 | `slug.test.ts` | Slugify; the reserved `miscellaneous` category slug |
 | `order.test.ts` | Fractional positions, renumbering, appending |
 | `captions.test.ts` | What a caption write means for the shown caption; the re-run merge rule; shown-tone fallback; hashtag normalising |
-| `walk.test.ts` | Walk-through room: the title bay and one bay per photo, wall alternation, ring size, angles, print and frame sizes, focus distance, where the lightbox draws a photo |
+| `walk.test.ts` | Walk-through room: its natural size and the repeats of a small collection, a large one hung once, the smallest room, prints in order on both walls, even spacing, the corridor, angles, print and frame sizes, focus distance, where the lightbox draws a photo |
 | `ai.test.ts` | The text sent to the model (place and month, never time or coordinates); tidying a model's answer; schema parity; blind-comparison tokens and tally; nearest location from GPS; production hostname and site origin |
 
 ## End to end: Playwright

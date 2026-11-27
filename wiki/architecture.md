@@ -51,7 +51,7 @@ src/
     ai-pure.ts          prompt, output schema, tidying, blind-comparison tokens (pure)
     captions.ts         tones, saved-caption rules, hashtags (pure)
     geo.ts              nearest known location for a GPS position (pure)
-    walk.ts             walk-through room geometry: bays round the ring, frames, lightbox rect (pure)
+    walk.ts             walk-through room geometry: bays round the ring, repeats, frames, lightbox rect (pure)
     client/             browser only: http.ts (fetch, XHR upload, retry), metadata.ts (exifr, ThumbHash, previews),
                         suggest.ts (downscaled image for the AI, suggest and vote calls)
   components/

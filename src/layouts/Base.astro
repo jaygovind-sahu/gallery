@@ -52,7 +52,8 @@ const year = new Date().getFullYear();
 ---
 
 <!doctype html>
-<html lang="en">
+<!-- Immersive pages: a full-height root, so the lightbox's no-scroll `height: 100%` on body keeps the viewport. -->
+<html lang="en" class:list={[immersive && 'h-full']}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

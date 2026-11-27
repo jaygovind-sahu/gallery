@@ -76,11 +76,13 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
 - **Entry:** every grid page (`GalleryPage`) has a "Walk" pill beside the layout toggle, linking to `/walk`. The walk page's Grid button goes to `/all`.
 - **Page:** [walk/index.astro](../src/pages/walk/index.astro) renders `Base` with `immersive` and `tone="light"`, and the [WalkGallery.tsx](../src/components/gallery/WalkGallery.tsx) island with `client:only`, so three.js stays out of the Worker bundle.
   - `immersive`: no footer, no page scroll, and the header floats over the room (`.site-header--overlay`: transparent, and only its links take the pointer).
+  - `immersive` also makes `<html>` full height. Otherwise the lightbox's no-scroll rule (`height: 100%` on body) collapses the page under it, and the room, which measures the canvas to step in and out of prints, would measure 1 px. The room also ignores a collapsed size when resizing.
   - `tone="light"`: the header and the walk root carry `.tone-light`, which redefines the colour tokens as dark ink on the room's off-white, so every `text-ink` / `bg-bg` class inside follows. The lightbox renders outside that scope and stays black.
-- **Geometry** (pure, [walk.ts](../src/lib/walk.ts), unit-tested): `planRoom` gives each wall its own bays, `ROOM.spacing` (3.3) centre to centre, so the longer outer wall holds more.
-  - The title takes the outer wall's bay 0. The photos fill the rest in order of angle, so walking forward passes them in order, on whichever wall comes next. Photos never repeat.
-  - The ring is just big enough for the title and every photo, with a 6-unit corridor.
-  - **Small sets** (where the smallest two-wall ring would leave more than a quarter of its bays blank) hang on the outer wall only, round a plain central column. The room is sized to them, with a corridor of at most 5. Any spare bays are blank wall before the title.
+- **Geometry** (pure, [walk.ts](../src/lib/walk.ts), unit-tested): `planRoom` gives each wall its own bays, `ROOM.spacing` (3.9) centre to centre, so the longer outer wall holds more. The corridor is always 6.
+  - The title takes the outer wall's bay 0. Prints fill the rest in order of angle, so walking forward passes the photos in order, on whichever wall comes next.
+  - **The room keeps its natural size** (inner radius `ROOM.innerRadius`, 12.2). A collection that would leave it more than half empty repeats round the walls in whole runs, as many as fill it best (`repeats`), and the room is sized to fit them exactly; 13 photos hang four times each.
+  - From about 47 photos each hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
+  - Prints are **slots** (`plan.slots`, each with its `photoIndex`). The room works in slots: picking, focus, stepping, the map. Textures, labels and the lightbox work in photos. Stepping into a photo, or back out of it, uses the print the visitor stands at, else the nearest print of that photo.
   - `lightboxRect` is where the lightbox will draw a photo (its padding, the 340 px info panel, real-size cap).
 - **Room:** [walk/room.ts](../src/components/gallery/walk/room.ts) builds walls, floor and ceiling as rings sampled round the angle. Their texture u counts bays, so each bay's light pool lines up with its print.
   - Every architectural mesh also blocks clicks, so prints hidden behind the inner wall can't be picked.
@@ -89,7 +91,7 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - Prints are framed (`framedSize`): a moulding, a white mat that is deeper at the bottom, a bright bevel round the opening, and a soft shadow on the wall below.
   - **Mouldings** (`MOULDINGS` in room.ts) are steps from the outer edge in, each with a face width, a depth off the wall and a finish. Every finish has a shade per face (lit tops, dark undersides), and each is drawn as one instanced mesh.
   - Styles: `gallery` (the default: black, stepped up to a ridge, with a gilt fillet against the mat), `gilt` (a museum gold frame), `walnut` (wide walnut with a gilt fillet) and `plain` (the earlier thin black). `?frame=` shows another, to compare them on the page.
-  - The light pools on each wall follow that wall's bays. The floor is two halves, each with the spill under its own wall's prints. A column gets an even wash and no pools.
+  - The light pools on each wall follow that wall's bays. The floor is two halves, each with the spill under its own wall's prints. Each wall's light pools follow its own bays.
   - **Wall labels:** title; then the exposure as figures with small units, like the info panel (`exposureFigures`); then place and year. Missing lines are left out.
   - **Title wall:** the visitor arrives facing it, and passes it again each lap. It carries two lines at eye level: "Photographs by …", and the count with the year span.
   - **Exceptions to the hard rules below** (dark only; no gradients; no borders or shadows on photos) apply to this page only. The owner asked for a lighter room with frames on 2026-11-26 (README → Decisions).

@@ -1,6 +1,6 @@
 /**
- * Pure geometry for the walk-through: a ring-shaped corridor with framed prints on both walls,
- * evenly spaced along each, and the title on the outer wall, which the visitor can walk round forever. No DOM or three.js
+ * Pure geometry for the walk-through: a ring-shaped corridor with framed prints on both walls, evenly spaced
+ * along each, and the title on the outer wall, which the visitor can walk round forever. No DOM or three.js
  * imports, so it runs in unit tests. World units are roughly metres.
  *
  * Angles follow three.js's CylinderGeometry: a point at angle θ and radius r is (r·sinθ, y, r·cosθ).
@@ -10,21 +10,19 @@
 export type Wall = 'outer' | 'inner';
 
 export const ROOM = {
-  /** Distance between the inner and outer walls, when both carry prints. */
+  /** Distance between the inner and outer walls. */
   corridor: 6,
   wallHeight: 4.6,
-  /** With prints on both walls, the inner wall never gets tighter than this. */
-  minInnerRadius: 4.5,
   /**
-   * A small set hangs on the outer wall only, round a plain central column, so it isn't spread thin round a
-   * ring too big for it: the room's smallest outer radius, the corridor round the column, and the column's
-   * smallest radius.
+   * The room's natural size: its inner wall's radius, a gentle curve with the visitor walking well clear of
+   * it. A collection too small to fill it repeats round the walls, as an exhibition hang does; a large one
+   * grows the room.
    */
-  minOuterRadius: 6.5,
-  columnCorridor: 5,
-  minColumnRadius: 1.6,
-  /** Centre to centre along either wall: the widest frame and an easy gap. Both walls keep it. */
-  spacing: 3.3,
+  innerRadius: 12.2,
+  /** A collection that nearly fills the natural room shrinks it a little, never below this. */
+  minInnerRadius: 8,
+  /** Centre to centre along either wall: the widest frame and a generous gap. Both walls keep it. */
+  spacing: 3.9,
   /** Height of a print's centre, and of the visitor's eyes while walking. */
   photoY: 1.92,
   eyeY: 1.72,
@@ -44,50 +42,44 @@ export interface Slot {
 export interface RoomPlan {
   innerRadius: number;
   outerRadius: number;
-  /** From the inner wall (or column) to the outer wall. */
-  corridor: number;
   walkRadius: number;
-  /** Bays round each whole wall, evenly spaced; the outer wall's bay 0 is the title. No inner bays: a column. */
+  /** Bays round each whole wall, evenly spaced; the outer wall's bay 0 is the title. */
   outerBays: number;
   innerBays: number;
+  /** How many times each photo hangs round the room: more than once only in a small collection. */
+  repeats: number;
   /** Average angle between neighbouring prints (either wall), for measuring distances in prints. */
   unit: number;
   /** On the outer wall: the exhibition title, where the visitor arrives and each lap begins. */
   titleAngle: number;
-  /** One per photo, in photo order, by angle round the ring. */
+  /** Every print round the room, by angle: the photos in order, again and again for a small collection. */
   slots: Slot[];
 }
 
 /**
- * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them), the ring just big
- * enough for the title and every photo. The title takes the outer wall's bay 0; the photos fill the rest in
- * order of angle, so walking forward passes them in order, on whichever wall comes next. Photos never repeat.
+ * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them). The title takes the
+ * outer wall's bay 0; prints fill the rest in order of angle, so walking forward passes the photos in order,
+ * on whichever wall comes next.
  *
- * Two walls can't make a small ring (the corridor needs its width), so when the smallest two-wall ring would
- * leave more than a quarter of the bays blank, the prints go on the outer wall only, round a central column,
- * the room sized to them. Any spare bays are blank wall just before the title.
+ * The room keeps close to its natural size. A collection that would leave it more than half empty repeats,
+ * in whole runs, as many times as fills it best, and the room is sized to fit them exactly; a larger one
+ * hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
  */
 export function planRoom(count: number): RoomPlan {
   const photos = Math.max(0, count);
-  const needed = photos + 1;
   const turn = Math.PI * 2;
   const bays = (r: number) => Math.floor((turn * r) / ROOM.spacing);
-
-  // Both walls' length together, for the title and every photo; then grow until whole bays fit.
-  let innerRadius = Math.max(ROOM.minInnerRadius, (needed * ROOM.spacing) / turn / 2 - ROOM.corridor / 2);
-  while (bays(innerRadius) + bays(innerRadius + ROOM.corridor) < needed) innerRadius += 0.05;
-  let outerRadius = innerRadius + ROOM.corridor;
-  let corridor: number = ROOM.corridor;
-  let innerBays = bays(innerRadius);
-  const blank = bays(outerRadius) + innerBays - needed;
-  if (blank > needed / 4) {
-    outerRadius = Math.max(ROOM.minOuterRadius, (needed * ROOM.spacing) / turn);
-    while (bays(outerRadius) < needed) outerRadius += 0.05;
-    corridor = Math.min(ROOM.columnCorridor, outerRadius - ROOM.minColumnRadius);
-    innerRadius = outerRadius - corridor;
-    innerBays = 0;
-  }
+  /** Prints a room of inner radius r holds, the title's bay aside. */
+  const capacity = (r: number) => bays(r) + bays(r + ROOM.corridor) - 1;
+  const natural = capacity(ROOM.innerRadius);
+  const repeats = photos > 0 && photos < natural ? Math.max(1, Math.round(natural / photos)) : 1;
+  const prints = photos * repeats;
+  let innerRadius: number = photos >= natural ? ROOM.innerRadius : ROOM.minInnerRadius;
+  if (photos === 0) innerRadius = ROOM.innerRadius;
+  while (capacity(innerRadius) < prints) innerRadius += 0.05;
+  const outerRadius = innerRadius + ROOM.corridor;
   const outerBays = bays(outerRadius);
+  const innerBays = bays(innerRadius);
   const positions = [
     ...Array.from({ length: outerBays - 1 }, (_, j) => ({ wall: 'outer' as Wall, angle: ((j + 1) * turn) / outerBays })),
     ...Array.from({ length: innerBays }, (_, j) => ({ wall: 'inner' as Wall, angle: ((j + 0.5) * turn) / innerBays })),
@@ -95,13 +87,13 @@ export function planRoom(count: number): RoomPlan {
   return {
     innerRadius,
     outerRadius,
-    corridor,
-    walkRadius: innerRadius + corridor * ROOM.walkLane,
+    walkRadius: innerRadius + ROOM.corridor * ROOM.walkLane,
     outerBays,
     innerBays,
+    repeats,
     unit: turn / (outerBays + innerBays),
     titleAngle: 0,
-    slots: positions.slice(0, photos).map((p, photoIndex) => ({ photoIndex, ...p })),
+    slots: positions.slice(0, prints).map((p, i) => ({ photoIndex: i % Math.max(1, photos), ...p })),
   };
 }
 

@@ -124,9 +124,6 @@ const WALK = {
   /** Turn from the direction of travel towards the inner wall, so both walls are in view. */
   yaw: 0.3,
   yawPortrait: 0.34,
-  /** Round a column (prints on the outer wall only): look along the corridor, a touch towards the prints. */
-  columnYaw: -0.08,
-  columnYawPortrait: -0.16,
   pitch: -0.04,
   /** World units walked per wheel pixel and per dragged pixel (mouse / touch). */
   wheel: 0.022,
@@ -219,19 +216,26 @@ export function createRoom(
     const print = photoSize(p.width, p.height);
     return { ...print, ...framedSize(print.w, print.h, frameWidth) };
   });
+  // Prints are slots round the room; a small collection hangs each photo in several of them. `k` below is
+  // always a slot; `photoOf(k)` is the photo it shows.
+  const prints = plan.slots.length;
+  const photoOf = (k: number) => plan.slots[k]!.photoIndex;
+  const slotsOf: number[][] = photos.map(() => []);
+  plan.slots.forEach((slot, k) => slotsOf[slot.photoIndex]!.push(k));
   /** Signed angle from `from` to print k, the short way round. */
   const towards = (k: number, from: number) => nearestEquivalent(plan.slots[k]!.angle, from) - from;
-  /** The print hanging nearest a point on the walk. */
-  const nearestTo = (angle: number) => {
-    let best = 0;
-    for (let k = 1; k < count; k++) if (Math.abs(towards(k, angle)) < Math.abs(towards(best, angle))) best = k;
+  /** The print hanging nearest a point on the walk; or, given a photo, the nearest print of it. */
+  const nearestTo = (angle: number, photo?: number) => {
+    const candidates = photo === undefined ? plan.slots.map((_, k) => k) : (slotsOf[photo] ?? []);
+    let best = candidates[0] ?? 0;
+    for (const k of candidates) if (Math.abs(towards(k, angle)) < Math.abs(towards(best, angle))) best = k;
     return best;
   };
   /** The first print strictly past `angle` in direction `dir`, and the signed angle to it. */
   const nextFrom = (angle: number, dir: 1 | -1) => {
     let best = 0;
     let bestD = Infinity;
-    for (let k = 0; k < count; k++) {
+    for (let k = 0; k < prints; k++) {
       let d = towards(k, angle) * dir;
       if (d <= 1e-4) d += TURN;
       if (d < bestD) {
@@ -326,13 +330,11 @@ export function createRoom(
   // Each wall has its own bays (outer ones centred on whole steps, inner ones half a step on), so the floor is
   // two halves, each with the spill under its own wall's prints.
   const outerStep = TURN / plan.outerBays;
-  // No inner bays: the inner wall is a plain column, lit evenly, its bays only for the floor's boards.
-  const column = plan.innerBays === 0;
-  const innerStep = TURN / (column ? Math.max(1, Math.floor((TURN * RI) / ROOM.spacing)) : plan.innerBays);
+  const innerStep = TURN / plan.innerBays;
   const mid = (RI + RO) / 2;
   add(wallRing(RO, (t) => t / outerStep + 0.5), lit(keep(wallTexture((RO * outerStep) / H))));
-  add(wallRing(RI, (t) => t / innerStep), lit(keep(wallTexture((RI * innerStep) / H, !column))));
-  add(flatRing(RI, mid, 0, (t) => t / innerStep), lit(keep(floorTexture('inner', !column))));
+  add(wallRing(RI, (t) => t / innerStep), lit(keep(wallTexture((RI * innerStep) / H))));
+  add(flatRing(RI, mid, 0, (t) => t / innerStep), lit(keep(floorTexture('inner'))));
   add(flatRing(mid, RO, 0, (t) => t / outerStep + 0.5), lit(keep(floorTexture('outer'))));
   add(flatRing(RI, RO, H, () => 0), keep(new MeshBasicMaterial({ color: COLORS.ceiling, side: DoubleSide })));
 
@@ -356,7 +358,7 @@ export function createRoom(
   const pieces = new Map<Finish, Matrix4[]>();
   const disc = keep(new CircleGeometry(1, 28));
   disc.rotateX(Math.PI / 2); // face down
-  const lights = count + 1; // one over each print and one over the title
+  const lights = prints + 1; // one over each print and one over the title
   const trims = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.trim })), lights);
   const lenses = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.lens, toneMapped: false })), lights);
   scene.add(trims, lenses);
@@ -411,26 +413,26 @@ export function createRoom(
   onWall(plan.titleAngle, 'outer', TITLE_W / 2).group.add(
     plane(keep(new MeshBasicMaterial({ map: titleTex, transparent: true, depthWrite: false, toneMapped: false })), TITLE_W, TITLE_H, 0, 1.8, 0.004),
   );
-  hangLight(count, plan.titleAngle, 'outer');
+  hangLight(prints, plan.titleAngle, 'outer');
 
   const pickables: Mesh[] = [];
-  /** Per photo: where its print's surface is, for stepping into it. */
+  /** Per print (slot): where its surface is, for stepping into it. */
   const surface: { r: number; outer: boolean }[] = [];
   const barDummy = new Object3D();
-  plan.slots.forEach((slot) => {
+  plan.slots.forEach((slot, n) => {
     const k = slot.photoIndex;
     const { w, h, outerW, outerH, centreY } = sizes[k]!;
     const outer = slot.wall === 'outer';
     const { group, r } = onWall(slot.angle, slot.wall, Math.max((outerW * SHADOW_SCALE) / 2, LABEL_W - outerW / 2));
-    surface[k] = { r: outer ? r - Z.print : r + Z.print, outer };
+    surface[n] = { r: outer ? r - Z.print : r + Z.print, outer };
     const frameY = ROOM.photoY + centreY;
     const state = states[k]!;
     // Light comes from above, so the shadow falls a little below the frame.
     group.add(plane(shadowMat, outerW * SHADOW_SCALE, outerH * SHADOW_SCALE, 0, frameY - 0.05, Z.shadow));
     const mat = plane(matMat, outerW, outerH, 0, frameY, Z.mat);
     const print = plane(state.material, w, h, 0, ROOM.photoY, Z.print);
-    mat.userData.photo = k;
-    print.userData.photo = k;
+    mat.userData.slot = n;
+    print.userData.slot = n;
     pickables.push(mat, print);
     group.add(mat, plane(bevelMat, w + 2 * BEVEL, h + 2 * BEVEL, 0, ROOM.photoY, Z.bevel), print);
     group.add(plane(state.label, LABEL_W, LABEL_H, -outerW / 2 + LABEL_W / 2, frameY - outerH / 2 - 0.12 - LABEL_H / 2, 0.004));
@@ -460,7 +462,7 @@ export function createRoom(
       inset += sw;
     }
     group.remove(barDummy);
-    hangLight(k, slot.angle, slot.wall);
+    hangLight(n, slot.angle, slot.wall);
   });
   const box = keep(new BoxGeometry(1, 1, 1));
   const instanced: InstancedMesh[] = [];
@@ -485,7 +487,7 @@ export function createRoom(
     angle: a,
     radius: plan.walkRadius,
     y: ROOM.eyeY,
-    heading: a - Math.PI / 2 + (column ? (portrait ? WALK.columnYawPortrait : WALK.columnYaw) : portrait ? WALK.yawPortrait : WALK.yaw),
+    heading: a - Math.PI / 2 + (portrait ? WALK.yawPortrait : WALK.yaw),
     pitch: WALK.pitch,
   });
   /** The heading that looks from (angle, radius) towards a point. */
@@ -495,8 +497,7 @@ export function createRoom(
   const introPose = (): Pose => {
     const t = plan.titleAngle;
     const angle = t - 0.12;
-    // Well back from the title, but clear of the column in a small room.
-    const radius = RO - Math.min(portrait ? 5.0 : 4.6, plan.corridor - 1.2);
+    const radius = RO - (portrait ? 5.0 : 4.6);
     const look = t + (portrait ? 0.01 : 0.13);
     return {
       angle,
@@ -519,9 +520,9 @@ export function createRoom(
 
   const focusPoseFor = (k: number, from: Pose): Pose => {
     const slot = plan.slots[k]!;
-    const { outerW, outerH } = sizes[k]!;
+    const { outerW, outerH } = sizes[slot.photoIndex]!;
     // Frame plus the three-line label under it.
-    const d = focusDistance(outerW, outerH + 0.6, camera.fov, camera.aspect, plan.corridor);
+    const d = focusDistance(outerW, outerH + 0.6, camera.fov, camera.aspect);
     const angle = nearestEquivalent(slot.angle, from.angle);
     const outer = slot.wall === 'outer';
     const tanY = Math.tan((camera.fov * Math.PI) / 360);
@@ -543,7 +544,7 @@ export function createRoom(
     const vw = box.width || 1;
     const vh = box.height || 1;
     const tanY = Math.tan((camera.fov * Math.PI) / 360);
-    const d = (sizes[k]!.h * vh) / (2 * tanY * Math.max(1, rect.height));
+    const d = (sizes[photoOf(k)]!.h * vh) / (2 * tanY * Math.max(1, rect.height));
     const perPixel = (2 * d * tanY) / vh;
     const dx = (rect.x - box.left + rect.width / 2 - vw / 2) * perPixel;
     const dy = (rect.y - box.top + rect.height / 2 - vh / 2) * perPixel;
@@ -616,9 +617,10 @@ export function createRoom(
     cb.onMove();
   };
 
+  /** Stand in front of print (slot) k, any number round the ring: it wraps. */
   const focusSlot = (k: number) => {
-    if (count === 0 || mode === 'dive') return;
-    const index = ((k % count) + count) % count;
+    if (prints === 0 || mode === 'dive') return;
+    const index = ((k % prints) + prints) % prints;
     moved();
     const next = focusPoseFor(index, pose);
     const far = Math.abs(next.angle - pose.angle) > WALK.jump;
@@ -628,8 +630,8 @@ export function createRoom(
     target = next;
     if (far) cutTo(() => undefined);
     else glideFrom(950 + Math.min(650, distance * 45));
-    want(index, 3);
-    cb.onFocus(index);
+    want(photoOf(index), 3);
+    cb.onFocus(photoOf(index));
     schedule();
   };
 
@@ -662,10 +664,12 @@ export function createRoom(
   const loader = new TextureLoader();
   let inflight = 0;
 
-  /** In prints, from the point the visitor is looking at, either way round. */
+  /** In prints, from the point the visitor is looking at to the nearest print of photo i, either way round. */
   const photoDistance = (i: number): number => {
     const view = focusK !== null ? plan.slots[focusK]!.angle : pose.angle + ahead;
-    return Math.abs(towards(i, view)) / plan.unit;
+    let best = Infinity;
+    for (const k of slotsOf[i] ?? []) best = Math.min(best, Math.abs(towards(k, view)));
+    return best / plan.unit;
   };
 
   const show = (i: number) => {
@@ -771,7 +775,7 @@ export function createRoom(
   const schedule = () => {
     for (let i = 0; i < count; i++) {
       const state = states[i]!;
-      if (state.want === 3 && focusK === i) continue;
+      if (state.want === 3 && focusK !== null && photoOf(focusK) === i) continue;
       const d = photoDistance(i);
       const next: Level = d < 2.6 ? 2 : d > 4 ? 1 : state.want === 3 ? 2 : state.want;
       if (next !== state.want) want(i, next);
@@ -803,8 +807,11 @@ export function createRoom(
 
   // ── Size ───────────────────────────────────────────────────────────────────────────────────────────────
   const resize = () => {
-    const width = host.clientWidth || 1;
-    const height = host.clientHeight || 1;
+    const width = host.clientWidth;
+    const height = host.clientHeight;
+    // Collapsed for a moment (a layout change under the lightbox): keep the last size, which stepping in
+    // and out of prints measures against.
+    if (width < 2 || height < 2) return;
     renderer.setSize(width, height);
     camera.aspect = width / height;
     portrait = camera.aspect < 0.8;
@@ -828,7 +835,7 @@ export function createRoom(
     raycaster.setFromCamera(pointer, camera);
     raycaster.far = 40;
     const first = raycaster.intersectObjects([...occluders, ...pickables], false)[0];
-    const index = first?.object.userData.photo;
+    const index = first?.object.userData.slot;
     return typeof index === 'number' ? index : null;
   };
 
@@ -881,7 +888,7 @@ export function createRoom(
       return;
     }
     if (mode === 'focus' && focusK === index) {
-      cb.onOpen(index);
+      cb.onOpen(photoOf(index));
       return;
     }
     focusSlot(index);
@@ -917,7 +924,7 @@ export function createRoom(
     const view = pose.angle + ahead;
     let bestK: number | null = null;
     let bestScore = Infinity;
-    for (let k = 0; k < count; k++) {
+    for (let k = 0; k < prints; k++) {
       const offset = towards(k, view);
       if (offset < -0.6 || offset > 1.4) continue;
       const r = plan.slots[k]!.wall === 'outer' ? RO : RI;
@@ -966,12 +973,12 @@ export function createRoom(
     if (changed) {
       placeCamera();
       dirty = true;
-      if (mode === 'walk' && count > 0) {
+      if (mode === 'walk' && prints > 0) {
         // None in view: the print in the nearest bay ahead.
-        const k = centralK() ?? nearestTo(a + ahead);
-        if (k !== currentPhoto) {
-          currentPhoto = k;
-          cb.onCurrent(k);
+        const photo = photoOf(centralK() ?? nearestTo(a + ahead));
+        if (photo !== currentPhoto) {
+          currentPhoto = photo;
+          cb.onCurrent(photo);
         }
       }
       if (Math.abs(pose.angle - lastAngle) > 1e-4 || Number.isNaN(lastAngle)) {
@@ -1011,7 +1018,7 @@ export function createRoom(
   // ── Handle ─────────────────────────────────────────────────────────────────────────────────────────────
   return {
     step(dir) {
-      if (paused || count === 0 || mode === 'dive') return;
+      if (paused || prints === 0 || mode === 'dive') return;
       moved();
       if (mode === 'focus' && focusK !== null) {
         focusSlot(focusK + dir);
@@ -1021,11 +1028,12 @@ export function createRoom(
       aTarget += nextFrom(aTarget + ahead, dir).d;
     },
     focusPhoto(photoIndex) {
-      if (mode === 'focus' && focusK === photoIndex) return;
-      focusSlot(photoIndex);
+      if (photoIndex < 0 || photoIndex >= count) return;
+      if (mode === 'focus' && focusK !== null && photoOf(focusK) === photoIndex) return;
+      focusSlot(nearestTo(pose.angle, photoIndex));
     },
     focusCurrent() {
-      if (mode === 'focus' || mode === 'dive' || count === 0) return;
+      if (mode === 'focus' || mode === 'dive' || prints === 0) return;
       if (mode === 'intro') {
         focusSlot(0);
         return;
@@ -1052,20 +1060,23 @@ export function createRoom(
     },
     stepIn(photoIndex, rect, done) {
       if (paused || photoIndex < 0 || photoIndex >= count) return;
+      // Into the print the visitor stands at, or the nearest one of that photo.
+      const k = focusK !== null && photoOf(focusK) === photoIndex ? focusK : nearestTo(pose.angle, photoIndex);
       mode = 'dive';
-      focusK = photoIndex;
-      target = divePoseFor(photoIndex, rect, pose);
+      focusK = k;
+      target = divePoseFor(k, rect, pose);
       want(photoIndex, 3);
       arrive = done;
       glideFrom(720, true);
     },
     standIn(photoIndex, rect) {
       if (photoIndex < 0 || photoIndex >= count) return;
+      const k = nearestTo(pose.angle, photoIndex);
       mode = 'dive';
-      focusK = photoIndex;
+      focusK = k;
       arrive = null;
       glide = null;
-      target = divePoseFor(photoIndex, rect, pose);
+      target = divePoseFor(k, rect, pose);
       pose = { ...target };
       want(photoIndex, 3);
       schedule();
@@ -1075,9 +1086,10 @@ export function createRoom(
     },
     stepOut(photoIndex) {
       if (photoIndex < 0 || photoIndex >= count) return;
+      const k = focusK !== null && photoOf(focusK) === photoIndex ? focusK : nearestTo(pose.angle, photoIndex);
       mode = 'focus';
-      focusK = photoIndex;
-      target = focusPoseFor(photoIndex, pose);
+      focusK = k;
+      target = focusPoseFor(k, pose);
       glideFrom(850, true);
       cb.onFocus(photoIndex);
     },
@@ -1151,7 +1163,7 @@ function glow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, r
  * One wall bay (one print's width of wall): warm plaster, slightly darker under the ceiling and towards the
  * floor, with the pool of light the recessed spot throws round the print. `aspect` is the bay's width / height.
  */
-function wallTexture(aspect: number, pool = true): CanvasTexture {
+function wallTexture(aspect: number): CanvasTexture {
   const height = 512;
   const width = Math.round(Math.min(1024, Math.max(256, height * aspect)));
   const unit = height / ROOM.wallHeight;
@@ -1173,24 +1185,15 @@ function wallTexture(aspect: number, pool = true): CanvasTexture {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
 
-  // The pool round the print, and the brighter scallop where the beam first meets the wall; a wall without
-  // prints (the column) gets an even wash instead. Pools are kept within the bay, so neighbours meet without
-  // a seam.
+  // The pool round the print, and the brighter scallop where the beam first meets the wall. Both are kept
+  // within the bay, so neighbouring bays' pools meet without a seam.
   const cx = width / 2;
-  if (!pool) {
-    const wash = ctx.createLinearGradient(0, height * 0.15, 0, height * 0.85);
-    wash.addColorStop(0, `rgba(${COLORS.light},0)`);
-    wash.addColorStop(0.45, `rgba(${COLORS.light},0.4)`);
-    wash.addColorStop(1, `rgba(${COLORS.light},0)`);
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, width, height);
-  }
-  if (pool) glow(ctx, cx, height - (ROOM.photoY + 0.2) * unit, Math.min(2.1 * unit, width / 2), 2.6 * unit, [
+  glow(ctx, cx, height - (ROOM.photoY + 0.2) * unit, Math.min(2.1 * unit, width / 2), 2.6 * unit, [
     [0, `rgba(${COLORS.light},0.9)`],
     [0.45, `rgba(${COLORS.light},0.5)`],
     [1, `rgba(${COLORS.light},0)`],
   ]);
-  if (pool) glow(ctx, cx, height - (ROOM.wallHeight - 1.05) * unit, Math.min(1.05 * unit, width * 0.4), 1.5 * unit, [
+  glow(ctx, cx, height - (ROOM.wallHeight - 1.05) * unit, Math.min(1.05 * unit, width * 0.4), 1.5 * unit, [
     [0, `rgba(${COLORS.light},0.45)`],
     [1, `rgba(${COLORS.light},0)`],
   ]);
@@ -1209,7 +1212,7 @@ function wallTexture(aspect: number, pool = true): CanvasTexture {
  * the spill of light under that wall's print. The canvas's top row is the outer edge of its strip (v = 1), so
  * the outer half has its wall at the top and the inner half at the bottom.
  */
-function floorTexture(edge: Wall, pool = true): CanvasTexture {
+function floorTexture(edge: Wall): CanvasTexture {
   const width = 512;
   const height = 512;
   const canvas = document.createElement('canvas');
@@ -1239,7 +1242,7 @@ function floorTexture(edge: Wall, pool = true): CanvasTexture {
   g.addColorStop(1, `rgba(${COLORS.shade},0)`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
-  if (pool) glow(ctx, width / 2, wallY, width * 0.45, height * 0.6, [
+  glow(ctx, width / 2, wallY, width * 0.45, height * 0.6, [
     [0, `rgba(${COLORS.light},0.5)`],
     [1, `rgba(${COLORS.light},0)`],
   ]);

@@ -4,79 +4,64 @@ import { aheadAngle, focusDistance, framedSize, lightboxRect, nearestEquivalent,
 const TURN = Math.PI * 2;
 
 describe('planRoom', () => {
-  it('has no prints for an empty gallery, but still a ring with the title', () => {
+  it('has no prints for an empty gallery, but still the room at its natural size', () => {
     const plan = planRoom(0);
     expect(plan.slots).toEqual([]);
-    expect(plan.outerBays).toBeGreaterThan(0);
+    expect(plan.innerRadius).toBe(ROOM.innerRadius);
     expect(plan.titleAngle).toBe(0);
   });
 
-  it('hangs every photo once, in order of angle round the ring, after the title', () => {
+  it('repeats a small collection in whole runs, in order, to fill a room near its natural size', () => {
+    const plan = planRoom(13);
+    expect(plan.repeats).toBe(4);
+    expect(plan.slots).toHaveLength(52);
+    plan.slots.forEach((slot, i) => expect(slot.photoIndex).toBe(i % 13));
+    expect(plan.innerRadius).toBeGreaterThan(ROOM.innerRadius * 0.8);
+    expect(plan.innerRadius).toBeLessThan(ROOM.innerRadius * 1.25);
+    expect(plan.outerBays - 1 + plan.innerBays - 52).toBeLessThan(3);
+  });
+
+  it('hangs a large collection once, in a room just big enough', () => {
+    for (const count of [60, 200]) {
+      const plan = planRoom(count);
+      expect(plan.repeats).toBe(1);
+      expect(plan.slots.map((s) => s.photoIndex)).toEqual([...Array(count).keys()]);
+      expect(plan.innerRadius).toBeGreaterThanOrEqual(ROOM.innerRadius);
+      expect(plan.outerBays - 1 + plan.innerBays - count).toBeLessThan(3);
+    }
+  });
+
+  it('never shrinks the room below its smallest size', () => {
+    for (const count of [1, 13, 30, 40, 46]) expect(planRoom(count).innerRadius).toBeGreaterThanOrEqual(ROOM.minInnerRadius);
+  });
+
+  it('keeps prints in order of angle round the ring, after the title, on both walls', () => {
     const plan = planRoom(40);
-    expect(plan.slots.map((s) => s.photoIndex)).toEqual([...Array(40).keys()]);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < plan.slots.length; i++) {
       expect(plan.slots[i]!.angle).toBeGreaterThan(plan.titleAngle);
       expect(plan.slots[i]!.angle).toBeLessThan(TURN);
       if (i > 0) expect(plan.slots[i]!.angle).toBeGreaterThanOrEqual(plan.slots[i - 1]!.angle);
     }
+    expect(plan.slots.some((s) => s.wall === 'inner')).toBe(true);
+    expect(plan.slots.some((s) => s.wall === 'outer')).toBe(true);
   });
 
   it('spaces both walls the same distance apart, so the longer outer wall holds more', () => {
-    for (const count of [48, 120, 300]) {
+    for (const count of [13, 60, 200]) {
       const plan = planRoom(count);
-      const outerArc = (TURN * plan.outerRadius) / plan.outerBays;
-      const innerArc = (TURN * plan.innerRadius) / plan.innerBays;
-      for (const arc of [outerArc, innerArc]) {
+      for (const arc of [(TURN * plan.outerRadius) / plan.outerBays, (TURN * plan.innerRadius) / plan.innerBays]) {
         expect(arc).toBeGreaterThanOrEqual(ROOM.spacing);
         expect(arc).toBeLessThan(ROOM.spacing * 1.2);
       }
       expect(plan.outerBays).toBeGreaterThan(plan.innerBays);
-      expect(plan.corridor).toBe(ROOM.corridor);
-      expect(plan.slots.some((s) => s.wall === 'inner')).toBe(true);
-      expect(plan.slots.some((s) => s.wall === 'outer')).toBe(true);
     }
   });
 
-  it('makes the ring just big enough for a large set, with room for the title', () => {
-    for (const count of [48, 120, 300]) {
-      const plan = planRoom(count);
-      const capacity = plan.outerBays - 1 + plan.innerBays;
-      expect(capacity).toBeGreaterThanOrEqual(count);
-      expect(capacity - count).toBeLessThan(4);
-    }
-  });
-
-  it('hangs a small set on the outer wall only, round a column, at the same spacing and nearly full', () => {
-    for (const count of [5, 13, 20]) {
-      const plan = planRoom(count);
-      expect(plan.innerBays).toBe(0);
-      expect(plan.slots.every((s) => s.wall === 'outer')).toBe(true);
-      const arc = (TURN * plan.outerRadius) / plan.outerBays;
-      expect(arc).toBeGreaterThanOrEqual(ROOM.spacing);
-      expect(arc).toBeLessThan(ROOM.spacing * 1.2);
-      expect(plan.innerRadius).toBeGreaterThanOrEqual(ROOM.minColumnRadius - 1e-9);
-      expect(plan.corridor).toBeLessThanOrEqual(ROOM.columnCorridor);
-    }
-    const thirteen = planRoom(13);
-    expect(thirteen.outerBays - 1 - 13).toBeLessThan(2);
-  });
-
-  it('keeps a very small set in the smallest room, the spare bays blank at the end of the lap', () => {
-    const plan = planRoom(3);
-    expect(plan.outerRadius).toBe(ROOM.minOuterRadius);
-    expect(plan.slots).toHaveLength(3);
-    expect(plan.slots[2]!.angle).toBeLessThan(Math.PI);
-  });
-
-  it('switches to two walls once a set is big enough to fill them', () => {
-    expect(planRoom(40).innerBays).toBeGreaterThan(0);
-  });
-
-  it('walks between the walls', () => {
+  it('keeps the corridor width and walks between the walls, well clear of the inner one', () => {
     for (const count of [13, 60]) {
       const plan = planRoom(count);
-      expect(plan.outerRadius - plan.innerRadius).toBeCloseTo(plan.corridor);
-      expect(plan.walkRadius).toBeGreaterThan(plan.innerRadius);
+      expect(plan.outerRadius - plan.innerRadius).toBeCloseTo(ROOM.corridor);
+      expect(plan.walkRadius - plan.innerRadius).toBeGreaterThan(3);
       expect(plan.walkRadius).toBeLessThan(plan.outerRadius);
       expect(aheadAngle(plan) * plan.walkRadius).toBeCloseTo(3.4);
     }

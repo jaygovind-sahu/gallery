@@ -68,9 +68,9 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
   // for the inner, so it reads as a floor plan.
   const marks = useMemo(() => {
     const plan = planRoom(photos.length);
-    return plan.slots.map((s) => {
+    return plan.slots.map((s, i) => {
       const [r0, r1] = s.wall === 'outer' ? [MAP.radius + 2, MAP.radius + 6] : [MAP.radius - 6, MAP.radius - 2];
-      return { key: s.photoIndex, from: onMap(r0, s.angle), to: onMap(r1, s.angle) };
+      return { key: i, from: onMap(r0, s.angle), to: onMap(r1, s.angle) };
     });
   }, [photos.length]);
 
