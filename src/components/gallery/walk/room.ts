@@ -21,6 +21,8 @@ import {
   Group,
   InstancedMesh,
   LinearFilter,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   Object3D,
@@ -43,6 +45,7 @@ import { placeholderDataUrl } from '../../../lib/gallery';
 import { imageUrl, type Size } from '../../../lib/images';
 import {
   aheadAngle,
+  cornerOffsets,
   easeInOutCubic,
   easeOutCubic,
   easeOutQuad,
@@ -51,7 +54,9 @@ import {
   focusDistance,
   fovToFit,
   framedSize,
+  innerOutline,
   innerSurface,
+  lightSlots,
   nearestEquivalent,
   outerMount,
   photoSize,
@@ -63,6 +68,7 @@ import {
   type Mount,
   type Point,
   type Rect,
+  underSlot,
   type Wall,
 } from '../../../lib/walk';
 
@@ -74,6 +80,12 @@ const COLORS = {
   light: '255,252,246',
   shade: '62,52,40',
   ceiling: 0xefece7,
+  /** Inside the light slots: their ceiling, the side facing the nearer wall, the side facing the corridor. */
+  slot: 0xe5e1da,
+  slotWall: 0xe0dbd3,
+  slotCorridor: 0xd3cdc4,
+  /** The steel cables from the picture rail down to each frame. */
+  cable: 0x9a958d,
   lens: 0xfffefb,
   trim: 0xd9d4cc,
   mat: 0xf5f3ef,
@@ -95,6 +107,18 @@ const FINISHES = {
   walnutDark: { front: 0x3a281e, top: 0x58402f, side: 0x2c1f16, under: 0x1a120c },
 };
 type Finish = keyof typeof FINISHES;
+
+/**
+ * Painted joinery round every wall, lit from above like the mouldings: a picture rail near the ceiling, which
+ * the cables hang from, and a skirting at the floor. Heights are of the bottom and top edges; depth is how far
+ * each stands out from the wall.
+ */
+const JOINERY = {
+  rail: { y0: ROOM.wallHeight - 0.4, y1: ROOM.wallHeight - 0.33, depth: 0.03, front: 0xe3dfd8, top: 0xf0ede8, under: 0xa39c91 },
+  skirting: { y0: 0, y1: 0.13, depth: 0.016, front: 0xc8c2b8, top: 0xe4e0d9, under: 0xc8c2b8 },
+};
+/** The ceiling's light slots, one over each wall all the way round (`lightSlots`): how wide and how deep. */
+const SLOT = { width: 0.26, depth: 0.12 };
 
 export type FrameStyle = 'gallery' | 'gilt' | 'walnut' | 'plain';
 export const FRAME_STYLES: readonly FrameStyle[] = ['gallery', 'gilt', 'walnut', 'plain'];
@@ -320,14 +344,14 @@ export function createRoom(
     }
     return geometry(position, uv, index);
   };
-  /** A wall of radius r, floor to ceiling; uv u from `u(θ)`, v up it. */
-  const wallRing = (r: number, u: (t: number) => number) => {
+  /** A wall of radius r, floor to ceiling unless told otherwise; uv u from `u(θ)`, v up it. */
+  const wallRing = (r: number, u: (t: number) => number, y0 = 0, y1: number = H) => {
     const position: number[] = [];
     const uv: number[] = [];
     const index: number[] = [];
     for (let i = 0; i <= SEGMENTS; i++) {
       const t = (TURN * i) / SEGMENTS;
-      position.push(r * Math.sin(t), 0, r * Math.cos(t), r * Math.sin(t), H, r * Math.cos(t));
+      position.push(r * Math.sin(t), y0, r * Math.cos(t), r * Math.sin(t), y1, r * Math.cos(t));
       uv.push(u(t), 0, u(t), 1);
       if (i < SEGMENTS) index.push(2 * i, 2 * i + 2, 2 * i + 1, 2 * i + 1, 2 * i + 2, 2 * i + 3);
     }
@@ -359,7 +383,6 @@ export function createRoom(
   add(wallRing(RI, (t) => t / innerStep), lit(keep(wallTexture((RI * innerStep) / H, 'plain'))));
   add(flatRing(RI, mid, 0, (t) => t / innerStep), lit(keep(floorTexture('inner'))));
   add(flatRing(mid, RO, 0, (t) => t / outerStep + 0.5), lit(keep(floorTexture('outer'))));
-  add(flatRing(RI, RO, H, () => 0), keep(new MeshBasicMaterial({ color: COLORS.ceiling, side: DoubleSide })));
   /** Per print (slot): its angled stretch of wall, for an inner print; a panorama's is longer. */
   const facets = plan.slots.map((slot) =>
     slot.wall === 'inner' ? facet(RI, slot.angle, Math.max(ROOM.facetLength, sizes[slot.photoIndex]!.outerW + 0.5)) : null,
@@ -368,6 +391,68 @@ export function createRoom(
   if (allFacets.length > 0) {
     add(uprights(allFacets.map((f) => [f.start, f.tip])), litFront(keep(wallTexture(ROOM.facetLength / H))));
     add(uprights(allFacets.map((f) => [f.tip, f.foot])), litFront(keep(wallTexture(0.3, 'shaded'))));
+  }
+  // The ceiling, with a light slot over each wall: a recess the spots sit in, running all the way round.
+  const slots = lightSlots(RI, RO, allFacets);
+  const plain = (color: number) => keep(new MeshBasicMaterial({ color, side: DoubleSide }));
+  const [ceiling, slotTop, slotWall, slotCorridor] = [COLORS.ceiling, COLORS.slot, COLORS.slotWall, COLORS.slotCorridor].map(plain);
+  const half = SLOT.width / 2;
+  const level = () => 0;
+  add(flatRing(RI, slots.inner - half, H, level), ceiling!);
+  add(flatRing(slots.inner + half, slots.outer - half, H, level), ceiling!);
+  add(flatRing(slots.outer + half, RO, H, level), ceiling!);
+  // Each slot's side nearer its wall faces the corridor, and the other side faces that wall.
+  for (const [r, facesCorridor, facesWall] of [
+    [slots.inner, slots.inner - half, slots.inner + half],
+    [slots.outer, slots.outer + half, slots.outer - half],
+  ] as const) {
+    add(flatRing(r - half, r + half, H + SLOT.depth, level), slotTop!);
+    add(wallRing(facesCorridor, level, H, H + SLOT.depth), slotCorridor!);
+    add(wallRing(facesWall, level, H, H + SLOT.depth), slotWall!);
+  }
+
+  // Picture rail and skirting along both walls: the outer curve, and the inner one out round every stretch.
+  const ledge = (outline: Point[], towards: 1 | -1, spec: (typeof JOINERY)[keyof typeof JOINERY]) => {
+    const offsets = cornerOffsets(outline, towards);
+    const n = outline.length;
+    // Each corner on the wall (a touch inside it, so no seam shows) and out at the moulding's face.
+    const back = outline.map((p, i) => ({ x: p.x - offsets[i]!.x * 0.005, z: p.z - offsets[i]!.z * 0.005 }));
+    const face = outline.map((p, i) => ({ x: p.x + offsets[i]!.x * spec.depth, z: p.z + offsets[i]!.z * spec.depth }));
+    const faces: number[][] = [[], [], []];
+    const { y0, y1 } = spec;
+    type V = [number, number, number];
+    /** Two triangles from the run a→b and its other edge c→d, wound to face `want`. */
+    const quad = (out: number[], a: V, b: V, c: V, d: V, want: V) => {
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const normal = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+      const facing = normal[0]! * want[0] + normal[1]! * want[1] + normal[2]! * want[2] >= 0;
+      out.push(...(facing ? [...a, ...b, ...c, ...c, ...b, ...d] : [...a, ...c, ...b, ...c, ...d, ...b]));
+    };
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const [p0, p1, q0, q1] = [back[i]!, back[j]!, face[i]!, face[j]!];
+      const length = Math.hypot(outline[j]!.x - outline[i]!.x, outline[j]!.z - outline[i]!.z) || 1;
+      const out: V = [(towards * (outline[i]!.z - outline[j]!.z)) / length, 0, (towards * (outline[j]!.x - outline[i]!.x)) / length];
+      quad(faces[0]!, [q0.x, y0, q0.z], [q1.x, y0, q1.z], [q0.x, y1, q0.z], [q1.x, y1, q1.z], out);
+      quad(faces[1]!, [p0.x, y1, p0.z], [p1.x, y1, p1.z], [q0.x, y1, q0.z], [q1.x, y1, q1.z], [0, 1, 0]);
+      quad(faces[2]!, [p0.x, y0, p0.z], [p1.x, y0, p1.z], [q0.x, y0, q0.z], [q1.x, y0, q1.z], [0, -1, 0]);
+    }
+    const g = keep(new BufferGeometry());
+    g.setAttribute('position', new Float32BufferAttribute(faces.flat(), 3));
+    let first = 0;
+    faces.forEach((list, i) => {
+      g.addGroup(first, list.length / 3, i);
+      first += list.length / 3;
+    });
+    const materials = [spec.front, spec.top, spec.under].map((color) => keep(new MeshBasicMaterial({ color })));
+    scene.add(new Mesh(g, materials));
+  };
+  const outerOutline = Array.from({ length: SEGMENTS }, (_, i) => ({ x: RO * Math.sin((TURN * i) / SEGMENTS), z: RO * Math.cos((TURN * i) / SEGMENTS) }));
+  const innerLine = innerOutline(RI, allFacets, SEGMENTS);
+  for (const spec of [JOINERY.rail, JOINERY.skirting]) {
+    ledge(outerOutline, -1, spec);
+    ledge(innerLine, 1, spec);
   }
   /** How far out from the centre the camera must stay within half a metre of angle θ, to keep clear of the inner wall. */
   const clearOfInner = (angle: number, margin: number) => {
@@ -386,7 +471,6 @@ export function createRoom(
   const LABEL_H = (LABEL_W * 300) / 1024;
   /** The shadow texture's rectangle fills 208 of its 256 px; the rest is the blur. */
   const SHADOW_SCALE = 256 / 208;
-  const LIGHT_OFFSET = 1.1;
 
   const planeGeometry = keep(new PlaneGeometry(1, 1));
   const matMat = keep(new MeshBasicMaterial({ color: COLORS.mat, toneMapped: false }));
@@ -416,13 +500,14 @@ export function createRoom(
     return mesh;
   };
   const lightDummy = new Object3D();
-  /** A recessed light in the ceiling over a print, a little way out from its wall: trim ring, then lens. */
-  const hangLight = (n: number, mount: Mount) => {
+  /** A recessed light in its wall's light slot, square on to the print: trim ring, then lens. */
+  const hangLight = (n: number, mount: Mount, wall: Wall) => {
+    const spot = underSlot(mount, wall === 'outer' ? slots.outer : slots.inner);
     for (const [mesh, radius, drop] of [
       [trims, 0.105, 0.003],
       [lenses, 0.08, 0.006],
     ] as const) {
-      lightDummy.position.set(mount.x + mount.nx * LIGHT_OFFSET, H - drop, mount.z + mount.nz * LIGHT_OFFSET);
+      lightDummy.position.set(spot.x, H + SLOT.depth - drop, spot.z);
       lightDummy.scale.setScalar(radius);
       lightDummy.updateMatrix();
       mesh.setMatrixAt(n, lightDummy.matrix);
@@ -444,6 +529,9 @@ export function createRoom(
   /** Per print (slot): the middle of its surface and the way it faces, for standing in front of it. */
   const surface: Mount[] = [];
   const barDummy = new Object3D();
+  /** Cable ends, top and bottom, two cables per print, in world space for one set of lines. */
+  const cable: number[] = [];
+  const cableEnd = new Vector3();
   plan.slots.forEach((slot, n) => {
     const k = slot.photoIndex;
     const { w, h, outerW, outerH, centreY } = sizes[k]!;
@@ -489,8 +577,19 @@ export function createRoom(
       inset += sw;
     }
     group.remove(barDummy);
-    hangLight(n, mount);
+    hangLight(n, mount, slot.wall);
+
+    // Two cables from the picture rail, a little in from each side, to hooks behind the top of the frame.
+    // They run a couple of centimetres off the wall, which on the concave outer wall comes closer at the sides.
+    for (const side of [-1, 1]) {
+      const x = side * outerW * 0.36;
+      const z = -standoff + (facets[n] ? 0 : (x * x) / (2 * RO)) + 0.018;
+      for (const y of [JOINERY.rail.y0, frameY + outerH / 2 - 0.03]) cable.push(...cableEnd.set(x, y, z).applyMatrix4(group.matrixWorld).toArray());
+    }
   });
+  const cableGeometry = keep(new BufferGeometry());
+  cableGeometry.setAttribute('position', new Float32BufferAttribute(cable, 3));
+  scene.add(new LineSegments(cableGeometry, keep(new LineBasicMaterial({ color: COLORS.cable }))));
   const box = keep(new BoxGeometry(1, 1, 1));
   const instanced: InstancedMesh[] = [];
   for (const [finish, matrices] of pieces) {
@@ -1254,9 +1353,13 @@ function wallTexture(aspect: number, kind: 'bay' | 'plain' | 'shaded' = 'bay'): 
     ctx.fillRect(0, 0, width, height);
   }
 
-  // Shadow gap where the wall meets the floor.
-  ctx.fillStyle = `rgba(${COLORS.shade},0.55)`;
-  ctx.fillRect(0, height - 0.035 * unit, width, 0.035 * unit);
+  // The picture rail's shadow, just below it. (The skirting covers the foot of the wall.)
+  const railY = height - JOINERY.rail.y0 * unit;
+  g = ctx.createLinearGradient(0, railY, 0, railY + 0.09 * unit);
+  g.addColorStop(0, `rgba(${COLORS.shade},0.2)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, railY, width, 0.09 * unit);
 
   const texture = canvasTexture(canvas);
   texture.wrapS = RepeatWrapping;
