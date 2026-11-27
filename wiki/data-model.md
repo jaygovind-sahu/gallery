@@ -37,7 +37,7 @@ The schema is [migrations/0001_init.sql](../migrations/0001_init.sql) plus [0003
 | Categories | `categories.position`, renumbered 1..n | `PATCH /api/admin/categories` with `{ ids }` |
 | `/all` | `photos.sort_order` | API only (`PATCH photos/:id` `sortOrder`); there is no UI yet |
 | Location page | `taken_at` newest first (undated last), then upload time | — |
-| Home | `created_at` newest first, 48 photos (`HOME_LIMIT`) | — |
+| Home (`/`, the walk-through) | `photos.sort_order`, as `/all` | — |
 | Miscellaneous (`/c/miscellaneous`) | `created_at` newest first: photos in no category have no manual order | — |
 
 - `positionBetween(before, after)` in [src/lib/order.ts](../src/lib/order.ts) returns the midpoint. When the gap is ≤ 1e-6 it also flags a renumber, and `movePhotoInCategory` then rewrites the whole category as 1..n.

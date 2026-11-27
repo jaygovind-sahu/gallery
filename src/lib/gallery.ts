@@ -16,9 +16,6 @@ export const LAYOUT_EVENT = 'gallery:layout';
 /** Height reserved under every tile for title + location (docs: ~44 px). */
 export const CAPTION_HEIGHT = 44;
 
-/** How many of the latest uploads the home page shows. */
-export const HOME_LIMIT = 48;
-
 export function isLayout(value: unknown): value is Layout {
   return typeof value === 'string' && (LAYOUTS as readonly string[]).includes(value);
 }

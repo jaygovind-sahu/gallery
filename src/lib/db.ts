@@ -209,15 +209,6 @@ function toPublicPhoto(r: PublicPhotoRow): PublicPhoto {
   };
 }
 
-/** Home page: the most recent uploads. */
-export async function listLatestPhotos(limit: number): Promise<PublicPhoto[]> {
-  const { results } = await db()
-    .prepare(`${PUBLIC_PHOTO_SELECT} WHERE ${PUBLIC_WHERE} ORDER BY p.created_at DESC, p.id DESC LIMIT ?`)
-    .bind(limit)
-    .all<PublicPhotoRow>();
-  return results.map(toPublicPhoto);
-}
-
 /** One category in its manual order. */
 export async function listCategoryPhotos(categoryId: string): Promise<PublicPhoto[]> {
   const { results } = await db()

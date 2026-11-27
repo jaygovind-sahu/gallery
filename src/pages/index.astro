@@ -1,18 +1,54 @@
 ---
-// Home: the header, then straight into the latest photos (docs/DESIGN.md, "Public gallery").
-import GalleryPage from '../components/gallery/GalleryPage.astro';
-import { getPublicNav, getSetting, listLatestPhotos } from '../lib/db';
-import { HOME_LIMIT, isLayout } from '../lib/gallery';
+/**
+ * Home: the walk-through, at the owner's request (README → Decisions). Every published photo, by sort_order,
+ * framed and hung round a ring-shaped room the visitor can walk forever. Categories are chosen in the grid, so
+ * the header here shows only the site name (`nav={null}`) and a Grid button to /all, the mirror of the Walk
+ * button on grid pages. There is no title over the scene, and none on the walls: the room is prints all the
+ * way round. `/walk` redirects here.
+ *
+ * Base runs `immersive` (no footer or page scroll; the header floats over the room) and in the light tone.
+ * The island is `client:only`, so three.js stays out of the Worker.
+ */
+import { env } from 'cloudflare:workers';
+import WalkGallery from '../components/gallery/WalkGallery';
+import Base from '../layouts/Base.astro';
+import { getSetting, listAllPhotos } from '../lib/db';
+import { altText, derivativeDimensions } from '../lib/gallery';
+import { siteOrigin } from '../lib/host';
+import { imageUrl } from '../lib/images';
 
-const [nav, siteTitle, defaultSetting, photos] = await Promise.all([
-  getPublicNav(),
-  getSetting('site_title'),
-  getSetting('default_layout'),
-  listLatestPhotos(HOME_LIMIT),
-]);
-const defaultLayout = isLayout(defaultSetting) ? defaultSetting : 'rows';
+const [siteTitle, photos] = await Promise.all([getSetting('site_title'), listAllPhotos()]);
+const title = siteTitle ?? 'Jay’s Gallery';
+const preview = photos[0] ?? null;
+const ogImage = preview
+  ? {
+      url: siteOrigin(env.SITE_URL, Astro.url.origin) + imageUrl(preview.id, preview.version, 1600),
+      ...derivativeDimensions(preview.width, preview.height, 1600),
+      alt: altText(preview),
+    }
+  : null;
 ---
 
-<GalleryPage title={siteTitle ?? 'Jay’s Gallery'} nav={nav} photos={photos} defaultLayout={defaultLayout} galleryUrl="/">
-  <h1 class="sr-only">Latest photos</h1>
-</GalleryPage>
+<Base title={title} nav={null} ogImage={ogImage} immersive tone="light">
+  <a slot="header-end" href="/all" class="walk-link" title="See the photos in the grid">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+      <rect x="3.75" y="3.75" width="7" height="7" rx="1.25" />
+      <rect x="13.25" y="3.75" width="7" height="7" rx="1.25" />
+      <rect x="3.75" y="13.25" width="7" height="7" rx="1.25" />
+      <rect x="13.25" y="13.25" width="7" height="7" rx="1.25" />
+    </svg>
+    <span>Grid</span>
+  </a>
+  <h1 class="sr-only">Walk-through of all photos</h1>
+  <div class="absolute inset-0">
+    <WalkGallery client:only="react" photos={photos} heading={title} gridUrl="/all">
+      <div slot="fallback" class="walk tone-light relative h-full w-full bg-bg">
+        <noscript>
+          <p class="absolute inset-x-0 bottom-10 m-0 px-4 text-center text-sm text-ink-muted">
+            The walk-through needs JavaScript. <a href="/all" class="text-ink underline decoration-divider underline-offset-4">See the photos in the grid</a>
+          </p>
+        </noscript>
+      </div>
+    </WalkGallery>
+  </div>
+</Base>

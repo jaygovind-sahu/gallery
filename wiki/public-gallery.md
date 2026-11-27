@@ -6,17 +6,17 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 
 | Path | File (`src/pages/`) | Photos | Default layout |
 | --- | --- | --- | --- |
-| `/` | `index.astro` | Latest 48 uploads | `settings.default_layout` |
+| `/` | `index.astro` | Every published photo, by `sort_order`, as one room to walk through ([below](#walk-through)) | — |
 | `/c/:slug` | `c/[slug].astro` | The category, in its manual order | The category's `default_layout` |
 | `/c/miscellaneous` | `c/miscellaneous.astro` | Published photos in no category, newest upload first (`listUncategorizedPhotos`); a 404 while there are none. The static route wins over `[slug]`, and the slug is reserved (below) | `settings.default_layout` |
 | `/all` | `all.astro` | Every published photo, by `sort_order` | `settings.default_layout` |
 | `/l/:slug` | `l/[slug].astro` | Photos at the location, newest taken first | `settings.default_layout` |
 | `/p/:id` | `p/[id].astro` | Opens the lightbox over the photo's first category (by category position), else Miscellaneous. Server-renders the title, caption and Open Graph tags with the 1600 px image | That gallery's |
-| `/walk` | `walk/index.astro` | Every published photo, by `sort_order`, as one room to walk through ([below](#walk-through)) | — |
+| `/walk` | `walk/index.astro` | A 302 to `/`, keeping the query: the walk-through's old address | — |
 
 - **404:** an unknown URL, slug or id, or a draft's permalink, gets [404.astro](../src/pages/404.astro) with status 404. Pages trigger it by returning `new Response(null, { status: 404 })`: Astro renders the 404 page for an empty-bodied 404. A body (like `/img`'s plain text) is sent as is. The wording is the same in every case.
-- Every page renders through [GalleryPage.astro](../src/components/gallery/GalleryPage.astro), which wraps [Base.astro](../src/layouts/Base.astro): header, footer, meta and Open Graph tags, and the header script (hides on scroll down; sets `data-scrolled` once the page has scrolled, which turns the header translucent with a hairline).
-- The heading block takes `heading`, an `eyebrow` (small caps above it: the photo count, plus the region on location pages) and a `subline` (the category description). The home page has none.
+- Every grid page renders through [GalleryPage.astro](../src/components/gallery/GalleryPage.astro), which wraps [Base.astro](../src/layouts/Base.astro): header, footer, meta and Open Graph tags, and the header script (hides on scroll down; sets `data-scrolled` once the page has scrolled, which turns the header translucent with a hairline).
+- The heading block takes `heading`, an `eyebrow` (small caps above it: the photo count, plus the region on location pages) and a `subline` (the category description).
 - Each page has two islands: `LayoutToggle` in the header's `header-end` slot, and `Gallery`.
 - **Header and footer menus** come from `getPublicNav()` in `db.ts`, which every page loads and passes down as `nav`: the categories with published photos (empty ones are left out), the count of published photos in no category, and the total.
   - Desktop: a **Categories** `<details>` menu and an **All** link. The menu lists each category with its count ([NavMenuItem.astro](../src/components/NavMenuItem.astro)), a dot on the current one, then Miscellaneous after a hairline when its count is above 0. On a category page the summary gets `data-active`, which underlines it like a current link.
@@ -68,13 +68,13 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 
 ## Walk-through
 
-Added at the owner's request, outside DESIGN.md's milestones (README → Decisions). The photos hang framed on both walls of a lit, ring-shaped corridor that the visitor can walk forever: there is no end to reach. Each inner print hangs on a short stretch of wall angled towards the visitor.
+Added at the owner's request, outside DESIGN.md's milestones, and since 2026-11-27 the home page (README → Decisions). The photos hang framed on both walls of a lit, ring-shaped corridor that the visitor can walk forever: there is no end to reach. Each inner print hangs on a short stretch of wall angled towards the visitor.
 
 A spiral ramp round an open atrium was tried and dropped: the owner chose the ring because it never stops. The inner wall is convex, so prints hung flat on it face the visitor only once they're beside it, outside a portrait phone's view (30–40° wide). A head turn towards the nearest print on stopping was tried for that and dropped, then prints on the outer wall only, before the angled stretches (README → Decisions).
 
 - **One room, everything in it.** The walk always shows every published photo, by `sort_order`; there is no per-category walk. Categories are chosen in the grid, so the walk's header shows only the site name and a Grid button (`Base` with `nav={null}`), and the page doesn't load the menu.
-- **Entry:** every grid page (`GalleryPage`) has a "Walk" pill beside the layout toggle, linking to `/walk`. The walk page's Grid button goes to `/all`.
-- **Page:** [walk/index.astro](../src/pages/walk/index.astro) renders `Base` with `immersive` and `tone="light"`, and the [WalkGallery.tsx](../src/components/gallery/WalkGallery.tsx) island with `client:only`, so three.js stays out of the Worker bundle.
+- **Entry:** it's the home page, `/`, so the site name in the header leads to it too. Every grid page (`GalleryPage`) has a "Walk" pill beside the layout toggle, linking to `/`. The walk's Grid button goes to `/all`. `/walk`, its old address, redirects to `/` with a 302 (a 301 would be cached by browsers for good).
+- **Page:** [index.astro](../src/pages/index.astro) renders `Base` with `immersive` and `tone="light"`, titled with the `site_title` setting, and the [WalkGallery.tsx](../src/components/gallery/WalkGallery.tsx) island with `client:only`, so three.js stays out of the Worker bundle.
   - `immersive`: no footer, no page scroll, and the header floats over the room (`.site-header--overlay`: transparent, and only its links take the pointer).
   - `immersive` also makes `<html>` full height. Otherwise the lightbox's no-scroll rule (`height: 100%` on body) collapses the page under it, and the room, which measures the canvas to step in and out of prints, would measure 1 px. The room also ignores a collapsed size when resizing.
   - `tone="light"`: the header and the walk root carry `.tone-light`, which redefines the colour tokens as dark ink on the room's off-white, so every `text-ink` / `bg-bg` class inside follows. The lightbox renders outside that scope and stays black.

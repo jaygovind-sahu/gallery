@@ -50,8 +50,8 @@ test.describe('public gallery', () => {
     for (const id of ids) await request.delete(`/api/admin/photos/${id}`);
   });
 
-  test('published photos appear on the category page, in /all, on the home page and at their location', async ({ page }) => {
-    for (const url of ['/c/birds', '/all', '/', '/l/marsh-creek-state-park']) {
+  test('published photos appear on the category page, in /all and at their location', async ({ page }) => {
+    for (const url of ['/c/birds', '/all', '/l/marsh-creek-state-park']) {
       await open(page, url);
       const link = tile(page, a);
       await expect(link, url).toBeVisible();
@@ -68,6 +68,20 @@ test.describe('public gallery', () => {
       const html = await page.content();
       expect(html).not.toMatch(/gps|r2_key|r2Key|originals\//i);
     }
+  });
+
+  test('the home page is the walk-through; /walk redirects to it; grid pages link to it', async ({ page, request }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Walk-through of all photos');
+    await expect(page.locator('header a.walk-link')).toHaveAttribute('href', '/all');
+    expect(await page.content()).not.toMatch(/gps|r2_key|r2Key|originals\//i);
+
+    const redirect = await request.get('/walk?frame=gilt', { maxRedirects: 0 });
+    expect(redirect.status()).toBe(302);
+    expect(redirect.headers()['location']).toBe('/?frame=gilt');
+
+    await open(page, '/c/birds');
+    await expect(page.locator('header a.walk-link')).toHaveAttribute('href', '/');
   });
 
   test('three layouts, the choice survives a reload and ?layout= overrides it', async ({ page }) => {
