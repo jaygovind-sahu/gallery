@@ -1,0 +1,1364 @@
+/**
+ * The walk-through: a lit gallery shaped as a ring-shaped corridor that never ends. Framed,
+ * matted prints hang on both walls, the exhibition title on the outer wall where each lap begins. The light
+ * is painted into the textures rather than computed, so every surface is an unlit material and the prints
+ * keep their exact colours. Browser only; the island loads it `client:only`.
+ *
+ * The visitor arrives facing the title wall, walks round (wheel, drag, keys, the map), clicks a print to
+ * stand in front of it, and from there steps into it: the camera moves until the print sits exactly where
+ * the lightbox will draw it, and the island fades the lightbox in over it. Closing steps back out.
+ */
+import {
+  BoxGeometry,
+  BufferGeometry,
+  Matrix4,
+  CanvasTexture,
+  CircleGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
+  Fog,
+  Group,
+  InstancedMesh,
+  LinearFilter,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PerspectiveCamera,
+  PlaneGeometry,
+  Raycaster,
+  RepeatWrapping,
+  Scene,
+  SRGBColorSpace,
+  Texture,
+  TextureLoader,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+  type Material,
+} from 'three';
+import type { PublicPhoto } from '../../../lib/db';
+import { exposureFigures } from '../../../lib/exif-format';
+import { placeholderDataUrl } from '../../../lib/gallery';
+import { imageUrl, type Size } from '../../../lib/images';
+import {
+  aheadAngle,
+  easeInOutCubic,
+  easeOutCubic,
+  easeOutQuad,
+  easeOutQuart,
+  focusDistance,
+  framedSize,
+  nearestEquivalent,
+  photoSize,
+  planRoom,
+  ROOM,
+  wrapAngle,
+  type Rect,
+  type Wall,
+} from '../../../lib/walk';
+
+/** Warm off-white plaster (near the site's ink tone), a plain white ceiling, pale oak underfoot. */
+const COLORS = {
+  air: 0xe4e0d9,
+  wall: '#dcd8d1',
+  /** The spots' light, and the falloff towards ceiling and floor, as rgb triples for canvas gradients. */
+  light: '255,252,246',
+  shade: '62,52,40',
+  ceiling: 0xefece7,
+  lens: 0xfffefb,
+  trim: 0xd9d4cc,
+  mat: 0xf5f3ef,
+  bevel: 0xfdfcfa,
+  blank: 0xd2cdc5,
+  ink: '#1a1918',
+  figure: '#2e2c29',
+  meta: '#6d6861',
+};
+
+/** A finish for moulding, one colour per face: lit from above, so tops are lightest and undersides darkest. */
+const FINISHES = {
+  black: { front: 0x262524, top: 0x4a4744, side: 0x181716, under: 0x0d0c0c },
+  blackRaised: { front: 0x343230, top: 0x5c5955, side: 0x1d1c1b, under: 0x0f0e0e },
+  gold: { front: 0xb39457, top: 0xdcc386, side: 0x8f7340, under: 0x5f4b25 },
+  goldLight: { front: 0xc9ab6c, top: 0xead69e, side: 0xa1834b, under: 0x6c552b },
+  goldDark: { front: 0x8c7240, top: 0xb69a5e, side: 0x6d582f, under: 0x45371b },
+  walnut: { front: 0x4b3427, top: 0x6e4f3b, side: 0x3a281d, under: 0x22170f },
+  walnutDark: { front: 0x3a281e, top: 0x58402f, side: 0x2c1f16, under: 0x1a120c },
+};
+type Finish = keyof typeof FINISHES;
+
+export type FrameStyle = 'gallery' | 'gilt' | 'walnut' | 'plain';
+export const FRAME_STYLES: readonly FrameStyle[] = ['gallery', 'gilt', 'walnut', 'plain'];
+
+/**
+ * Mouldings as steps from the outer edge in: each step's face width, how far it stands off the wall, and its
+ * finish. Steps at different depths make the profile; the innermost is usually a fillet against the mat.
+ */
+const MOULDINGS: Record<FrameStyle, { width: number; depth: number; finish: Finish }[]> = {
+  // Black, rising to a raised ridge and down again, with a thin gilt fillet against the mat.
+  gallery: [
+    { width: 0.028, depth: 0.045, finish: 'black' },
+    { width: 0.034, depth: 0.07, finish: 'blackRaised' },
+    { width: 0.022, depth: 0.052, finish: 'black' },
+    { width: 0.011, depth: 0.034, finish: 'gold' },
+  ],
+  // A museum gilt frame: an outer bead, a high rounded run, then steps down to a bright sight edge.
+  gilt: [
+    { width: 0.03, depth: 0.06, finish: 'goldDark' },
+    { width: 0.035, depth: 0.085, finish: 'goldLight' },
+    { width: 0.025, depth: 0.07, finish: 'gold' },
+    { width: 0.02, depth: 0.055, finish: 'goldDark' },
+    { width: 0.01, depth: 0.038, finish: 'goldLight' },
+  ],
+  // A wide, flat walnut face, a dark step in, and a gilt fillet.
+  walnut: [
+    { width: 0.07, depth: 0.06, finish: 'walnut' },
+    { width: 0.022, depth: 0.045, finish: 'walnutDark' },
+    { width: 0.011, depth: 0.032, finish: 'gold' },
+  ],
+  // The thin black frame from before, for comparison.
+  plain: [{ width: 0.045, depth: 0.05, finish: 'black' }],
+};
+
+const WALK = {
+  /** Turn from the direction of travel towards the inner wall, so both walls are in view. */
+  yaw: 0.3,
+  yawPortrait: 0.34,
+  /** Round a column (prints on the outer wall only): look along the corridor, a touch towards the prints. */
+  columnYaw: -0.08,
+  columnYawPortrait: -0.16,
+  pitch: -0.04,
+  /** World units walked per wheel pixel and per dragged pixel (mouse / touch). */
+  wheel: 0.022,
+  drag: 0.032,
+  dragTouch: 0.06,
+  /** Exponential damping of the walk, in seconds. */
+  tau: 0.36,
+  tauReduced: 0.12,
+  /** Moves longer than this (radians round the ring) cut through a quick fade instead of gliding. */
+  jump: 1.6,
+};
+
+/** Texture levels: the ThumbHash, then real derivatives. Only sizes the tiles and lightbox already use. */
+type Level = 0 | 1 | 2 | 3;
+const LEVEL_SIZE: Record<1 | 2 | 3, Size> = { 1: 480, 2: 1080, 3: 1600 };
+
+interface Pose {
+  angle: number;
+  radius: number;
+  y: number;
+  heading: number;
+  pitch: number;
+}
+
+interface PhotoState {
+  material: MeshBasicMaterial;
+  label: MeshBasicMaterial;
+  textures: Partial<Record<Level, Texture>>;
+  loading: Set<Level>;
+  want: Level;
+}
+
+export interface RoomCallbacks {
+  /** The print most in view while walking changed. */
+  onCurrent: (photoIndex: number) => void;
+  /** The camera now stands in front of this print, or went back to walking (null). */
+  onFocus: (photoIndex: number | null) => void;
+  /** The focused print was clicked again. */
+  onOpen: (photoIndex: number) => void;
+  /** The visitor moved for the first time (hide the hints). */
+  onMove: () => void;
+  /** Where the visitor stands round the ring, 0…2π from the title wall, whenever it changes. */
+  onAngle: (angle: number) => void;
+}
+
+/** The small lines lettered on the title wall: who took the photographs, how many, and when. */
+export interface RoomTitle {
+  lines: string[];
+}
+
+export interface RoomHandle {
+  /** Walk one print on (1) or back (-1); while standing at a print, move to the next or previous one. */
+  step: (dir: 1 | -1) => void;
+  focusPhoto: (photoIndex: number) => void;
+  focusCurrent: () => void;
+  unfocus: () => void;
+  /** Walk to a point round the ring (0…2π from the title wall), the short way round. */
+  walkTo: (angle: number) => void;
+  /** Step into a print until it fills `rect` (client pixels), then call `done`. */
+  stepIn: (photoIndex: number, rect: Rect, done: () => void) => void;
+  /** While the lightbox covers the room: stand where this print fills `rect`, so closing reveals it there. */
+  standIn: (photoIndex: number, rect: Rect) => void;
+  /** After the lightbox: step back out from this print to stand in front of it. */
+  stepOut: (photoIndex: number) => void;
+  /** Stop rendering and input while the lightbox covers the room. */
+  setPaused: (paused: boolean) => void;
+  dispose: () => void;
+}
+
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+
+/** Throws when WebGL is unavailable; the island falls back to the grid. */
+export function createRoom(
+  host: HTMLElement,
+  inputRoot: HTMLElement,
+  photos: PublicPhoto[],
+  title: RoomTitle,
+  cb: RoomCallbacks,
+  options: { reducedMotion: boolean; frame?: FrameStyle },
+): RoomHandle {
+  const plan = planRoom(photos.length);
+  const count = photos.length;
+  const { innerRadius: RI, outerRadius: RO } = plan;
+  const ahead = aheadAngle(plan);
+  const H = ROOM.wallHeight;
+  const TURN = Math.PI * 2;
+  const moulding = MOULDINGS[options.frame ?? 'gallery'];
+  const frameWidth = moulding.reduce((sum, step) => sum + step.width, 0);
+  const sizes = photos.map((p) => {
+    const print = photoSize(p.width, p.height);
+    return { ...print, ...framedSize(print.w, print.h, frameWidth) };
+  });
+  /** Signed angle from `from` to print k, the short way round. */
+  const towards = (k: number, from: number) => nearestEquivalent(plan.slots[k]!.angle, from) - from;
+  /** The print hanging nearest a point on the walk. */
+  const nearestTo = (angle: number) => {
+    let best = 0;
+    for (let k = 1; k < count; k++) if (Math.abs(towards(k, angle)) < Math.abs(towards(best, angle))) best = k;
+    return best;
+  };
+  /** The first print strictly past `angle` in direction `dir`, and the signed angle to it. */
+  const nextFrom = (angle: number, dir: 1 | -1) => {
+    let best = 0;
+    let bestD = Infinity;
+    for (let k = 0; k < count; k++) {
+      let d = towards(k, angle) * dir;
+      if (d <= 1e-4) d += TURN;
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return { k: best, d: bestD * dir };
+  };
+
+  const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(COLORS.air);
+  const canvas = renderer.domElement;
+  canvas.style.display = 'block';
+  canvas.style.touchAction = 'none';
+  canvas.style.cursor = 'grab';
+  canvas.style.transition = 'opacity 170ms ease';
+  canvas.setAttribute('aria-hidden', 'true');
+  host.appendChild(canvas);
+  const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+  const scene = new Scene();
+  scene.fog = new Fog(COLORS.air, 9, 44);
+  const camera = new PerspectiveCamera(56, 1, 0.05, 90);
+  camera.rotation.order = 'YXZ';
+
+  /** Something changed on screen since the last frame was drawn. */
+  let dirty = true;
+  let paused = false;
+  let disposed = false;
+  const disposables: { dispose: () => void }[] = [];
+  const keep = <T extends { dispose: () => void }>(thing: T): T => {
+    disposables.push(thing);
+    return thing;
+  };
+  const timers = new Set<number>();
+  const later = (fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timers.delete(id);
+      if (!disposed) fn();
+    }, ms);
+    timers.add(id);
+  };
+
+  // ── The room ───────────────────────────────────────────────────────────────────────────────────────────
+  // Walls are vertical bands and the floor and ceiling flat rings, sampled round the angle so their texture
+  // coordinates follow it: u counts bays, so each bay's light pool lines up with its print. Every
+  // architectural mesh also blocks clicks, so prints hidden behind the inner wall can't be picked.
+  const occluders: Mesh[] = [];
+  const SEGMENTS = Math.max(160, (plan.outerBays + plan.innerBays) * 10);
+  const geometry = (position: number[], uv: number[], index: number[]) => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute(position, 3));
+    g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+    g.setIndex(index);
+    return keep(g);
+  };
+  const add = (g: BufferGeometry, material: Material) => {
+    const mesh = new Mesh(g, material);
+    scene.add(mesh);
+    occluders.push(mesh);
+    return mesh;
+  };
+  /** A flat ring from r0 to r1 at height y; uv u from `u(θ)`, v across it (0 at r0). */
+  const flatRing = (r0: number, r1: number, y: number, u: (t: number) => number) => {
+    const position: number[] = [];
+    const uv: number[] = [];
+    const index: number[] = [];
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const t = (TURN * i) / SEGMENTS;
+      position.push(r0 * Math.sin(t), y, r0 * Math.cos(t), r1 * Math.sin(t), y, r1 * Math.cos(t));
+      uv.push(u(t), 0, u(t), 1);
+      if (i < SEGMENTS) index.push(2 * i, 2 * i + 2, 2 * i + 1, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+    }
+    return geometry(position, uv, index);
+  };
+  /** A wall of radius r, floor to ceiling; uv u from `u(θ)`, v up it. */
+  const wallRing = (r: number, u: (t: number) => number) => {
+    const position: number[] = [];
+    const uv: number[] = [];
+    const index: number[] = [];
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const t = (TURN * i) / SEGMENTS;
+      position.push(r * Math.sin(t), 0, r * Math.cos(t), r * Math.sin(t), H, r * Math.cos(t));
+      uv.push(u(t), 0, u(t), 1);
+      if (i < SEGMENTS) index.push(2 * i, 2 * i + 2, 2 * i + 1, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+    }
+    return geometry(position, uv, index);
+  };
+  const lit = (texture: Texture) => keep(new MeshBasicMaterial({ map: texture, side: DoubleSide }));
+  // Each wall has its own bays (outer ones centred on whole steps, inner ones half a step on), so the floor is
+  // two halves, each with the spill under its own wall's prints.
+  const outerStep = TURN / plan.outerBays;
+  // No inner bays: the inner wall is a plain column, lit evenly, its bays only for the floor's boards.
+  const column = plan.innerBays === 0;
+  const innerStep = TURN / (column ? Math.max(1, Math.floor((TURN * RI) / ROOM.spacing)) : plan.innerBays);
+  const mid = (RI + RO) / 2;
+  add(wallRing(RO, (t) => t / outerStep + 0.5), lit(keep(wallTexture((RO * outerStep) / H))));
+  add(wallRing(RI, (t) => t / innerStep), lit(keep(wallTexture((RI * innerStep) / H, !column))));
+  add(flatRing(RI, mid, 0, (t) => t / innerStep), lit(keep(floorTexture('inner', !column))));
+  add(flatRing(mid, RO, 0, (t) => t / outerStep + 0.5), lit(keep(floorTexture('outer'))));
+  add(flatRing(RI, RO, H, () => 0), keep(new MeshBasicMaterial({ color: COLORS.ceiling, side: DoubleSide })));
+
+  // ── The title wall and the framed prints ───────────────────────────────────────────────────────────────
+  // Each print: a soft shadow on the wall, the frame (four bars), the mat, a bright bevel round the opening,
+  // the print itself, and a label below. Depths are a few millimetres apart so nothing fights in the depth
+  // buffer at a distance.
+  const Z = { shadow: 0.003, mat: 0.02, bevel: 0.024, print: 0.028 };
+  const BEVEL = 0.007;
+  const LABEL_W = 1.5;
+  const LABEL_H = (LABEL_W * 300) / 1024;
+  /** The shadow texture's rectangle fills 208 of its 256 px; the rest is the blur. */
+  const SHADOW_SCALE = 256 / 208;
+  const LIGHT_OFFSET = 1.1;
+
+  const planeGeometry = keep(new PlaneGeometry(1, 1));
+  const matMat = keep(new MeshBasicMaterial({ color: COLORS.mat, toneMapped: false }));
+  const bevelMat = keep(new MeshBasicMaterial({ color: COLORS.bevel, toneMapped: false }));
+  const shadowMat = keep(new MeshBasicMaterial({ map: keep(shadowTexture()), transparent: true, depthWrite: false, opacity: 0.6 }));
+  /** Moulding pieces by finish, placed per print, then drawn as one instanced mesh per finish. */
+  const pieces = new Map<Finish, Matrix4[]>();
+  const disc = keep(new CircleGeometry(1, 28));
+  disc.rotateX(Math.PI / 2); // face down
+  const lights = count + 1; // one over each print and one over the title
+  const trims = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.trim })), lights);
+  const lenses = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.lens, toneMapped: false })), lights);
+  scene.add(trims, lenses);
+
+  const states: PhotoState[] = photos.map(() => ({
+    material: keep(new MeshBasicMaterial({ color: COLORS.blank, toneMapped: false })),
+    label: keep(new MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, visible: false })),
+    textures: {},
+    loading: new Set<Level>(),
+    want: 1,
+  }));
+
+  const plane = (material: Material, w: number, h: number, x: number, y: number, z: number) => {
+    const mesh = new Mesh(planeGeometry, material);
+    mesh.scale.set(w, h, 1);
+    mesh.position.set(x, y, z);
+    return mesh;
+  };
+  const lightDummy = new Object3D();
+  /** A recessed light in the ceiling over a bay, a little way out from the wall: trim ring, then lens. */
+  const hangLight = (n: number, angle: number, wall: Wall) => {
+    const r = wall === 'outer' ? RO - LIGHT_OFFSET : RI + LIGHT_OFFSET;
+    for (const [mesh, radius, drop] of [
+      [trims, 0.105, 0.003],
+      [lenses, 0.08, 0.006],
+    ] as const) {
+      lightDummy.position.set(r * Math.sin(angle), H - drop, r * Math.cos(angle));
+      lightDummy.scale.setScalar(radius);
+      lightDummy.updateMatrix();
+      mesh.setMatrixAt(n, lightDummy.matrix);
+    }
+  };
+  /** A group on a wall at angle θ, facing into the corridor, its origin on the floor. */
+  const onWall = (angle: number, wall: Wall, halfExtent: number) => {
+    const outer = wall === 'outer';
+    // Flat things on the concave outer wall stand off far enough that their edges clear it.
+    const r = outer ? RO - (halfExtent * halfExtent) / (2 * RO) - 0.01 : RI + 0.004;
+    const s = Math.sin(angle);
+    const c = Math.cos(angle);
+    const facing = outer ? -1 : 1;
+    const group = new Group();
+    group.position.set(r * s, 0, r * c);
+    group.lookAt(group.position.x + facing * s, 0, group.position.z + facing * c);
+    group.updateMatrixWorld();
+    scene.add(group);
+    return { group, r };
+  };
+
+  const titleTex = keep(titleTexture(title));
+  const TITLE_W = 2.5;
+  const TITLE_H = (TITLE_W * 200) / 1600;
+  onWall(plan.titleAngle, 'outer', TITLE_W / 2).group.add(
+    plane(keep(new MeshBasicMaterial({ map: titleTex, transparent: true, depthWrite: false, toneMapped: false })), TITLE_W, TITLE_H, 0, 1.8, 0.004),
+  );
+  hangLight(count, plan.titleAngle, 'outer');
+
+  const pickables: Mesh[] = [];
+  /** Per photo: where its print's surface is, for stepping into it. */
+  const surface: { r: number; outer: boolean }[] = [];
+  const barDummy = new Object3D();
+  plan.slots.forEach((slot) => {
+    const k = slot.photoIndex;
+    const { w, h, outerW, outerH, centreY } = sizes[k]!;
+    const outer = slot.wall === 'outer';
+    const { group, r } = onWall(slot.angle, slot.wall, Math.max((outerW * SHADOW_SCALE) / 2, LABEL_W - outerW / 2));
+    surface[k] = { r: outer ? r - Z.print : r + Z.print, outer };
+    const frameY = ROOM.photoY + centreY;
+    const state = states[k]!;
+    // Light comes from above, so the shadow falls a little below the frame.
+    group.add(plane(shadowMat, outerW * SHADOW_SCALE, outerH * SHADOW_SCALE, 0, frameY - 0.05, Z.shadow));
+    const mat = plane(matMat, outerW, outerH, 0, frameY, Z.mat);
+    const print = plane(state.material, w, h, 0, ROOM.photoY, Z.print);
+    mat.userData.photo = k;
+    print.userData.photo = k;
+    pickables.push(mat, print);
+    group.add(mat, plane(bevelMat, w + 2 * BEVEL, h + 2 * BEVEL, 0, ROOM.photoY, Z.bevel), print);
+    group.add(plane(state.label, LABEL_W, LABEL_H, -outerW / 2 + LABEL_W / 2, frameY - outerH / 2 - 0.12 - LABEL_H / 2, 0.004));
+
+    // The moulding, step by step from the outside in: in each, the top and bottom run the full width and the
+    // sides fit between them.
+    group.add(barDummy);
+    let inset = 0;
+    for (const step of moulding) {
+      const w0 = outerW - 2 * inset;
+      const h0 = outerH - 2 * inset;
+      const sw = step.width;
+      const bars: [number, number, number, number][] = [
+        [0, frameY + h0 / 2 - sw / 2, w0, sw],
+        [0, frameY - h0 / 2 + sw / 2, w0, sw],
+        [-w0 / 2 + sw / 2, frameY, sw, h0 - 2 * sw],
+        [w0 / 2 - sw / 2, frameY, sw, h0 - 2 * sw],
+      ];
+      const list = pieces.get(step.finish) ?? [];
+      for (const [x, y, bw, bh] of bars) {
+        barDummy.position.set(x, y, step.depth / 2);
+        barDummy.scale.set(bw, bh, step.depth);
+        barDummy.updateMatrixWorld();
+        list.push(barDummy.matrixWorld.clone());
+      }
+      pieces.set(step.finish, list);
+      inset += sw;
+    }
+    group.remove(barDummy);
+    hangLight(k, slot.angle, slot.wall);
+  });
+  const box = keep(new BoxGeometry(1, 1, 1));
+  const instanced: InstancedMesh[] = [];
+  for (const [finish, matrices] of pieces) {
+    const colours = FINISHES[finish];
+    const face = (color: number) => keep(new MeshBasicMaterial({ color }));
+    const [front, top, side, under] = [face(colours.front), face(colours.top), face(colours.side), face(colours.under)];
+    // BoxGeometry's groups: +x, -x, +y, -y, +z, -z.
+    const mesh = new InstancedMesh(box, [side, side, top, under, front, side], matrices.length);
+    matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+    mesh.instanceMatrix.needsUpdate = true;
+    scene.add(mesh);
+    instanced.push(mesh);
+  }
+  trims.instanceMatrix.needsUpdate = true;
+  lenses.instanceMatrix.needsUpdate = true;
+
+  // ── Camera ─────────────────────────────────────────────────────────────────────────────────────────────
+  let portrait = false;
+  const tau = options.reducedMotion ? WALK.tauReduced : WALK.tau;
+  const walkPose = (a: number): Pose => ({
+    angle: a,
+    radius: plan.walkRadius,
+    y: ROOM.eyeY,
+    heading: a - Math.PI / 2 + (column ? (portrait ? WALK.columnYawPortrait : WALK.columnYaw) : portrait ? WALK.yawPortrait : WALK.yaw),
+    pitch: WALK.pitch,
+  });
+  /** The heading that looks from (angle, radius) towards a point. */
+  const headingTowards = (angle: number, radius: number, tx: number, tz: number) =>
+    Math.atan2(-(tx - radius * Math.sin(angle)), -(tz - radius * Math.cos(angle)));
+  /** On arrival: facing the title wall, with the corridor curving away to the left. */
+  const introPose = (): Pose => {
+    const t = plan.titleAngle;
+    const angle = t - 0.12;
+    // Well back from the title, but clear of the column in a small room.
+    const radius = RO - Math.min(portrait ? 5.0 : 4.6, plan.corridor - 1.2);
+    const look = t + (portrait ? 0.01 : 0.13);
+    return {
+      angle,
+      radius,
+      y: ROOM.eyeY,
+      heading: headingTowards(angle, radius, RO * Math.sin(look), RO * Math.cos(look)),
+      pitch: 0.03,
+    };
+  };
+
+  let mode: 'intro' | 'walk' | 'focus' | 'dive' = 'intro';
+  let a = plan.titleAngle - 0.12;
+  let aTarget = a;
+  let focusK: number | null = null;
+  let target: Pose = introPose();
+  let pose: Pose = { ...target };
+  let glide: { from: Pose; start: number; duration: number; smooth: boolean } | null = null;
+  let arrive: (() => void) | null = null;
+  let now = performance.now();
+
+  const focusPoseFor = (k: number, from: Pose): Pose => {
+    const slot = plan.slots[k]!;
+    const { outerW, outerH } = sizes[k]!;
+    // Frame plus the three-line label under it.
+    const d = focusDistance(outerW, outerH + 0.6, camera.fov, camera.aspect, plan.corridor);
+    const angle = nearestEquivalent(slot.angle, from.angle);
+    const outer = slot.wall === 'outer';
+    const tanY = Math.tan((camera.fov * Math.PI) / 360);
+    return {
+      angle,
+      radius: outer ? RO - d : RI + d,
+      // Centred on frame and label, then a little lower, so the frame sits above the caption bar.
+      y: ROOM.photoY - 0.25 - d * tanY * (portrait ? 0.24 : 0.14),
+      heading: nearestEquivalent(outer ? angle + Math.PI : angle, from.heading),
+      pitch: 0,
+    };
+  };
+
+  /** Where to stand so print k fills `rect` on screen: straight in front of it, square on. */
+  const divePoseFor = (k: number, rect: Rect, from: Pose): Pose => {
+    const base = nearestEquivalent(plan.slots[k]!.angle, from.angle);
+    const { r, outer } = surface[k]!;
+    const box = canvas.getBoundingClientRect();
+    const vw = box.width || 1;
+    const vh = box.height || 1;
+    const tanY = Math.tan((camera.fov * Math.PI) / 360);
+    const d = (sizes[k]!.h * vh) / (2 * tanY * Math.max(1, rect.height));
+    const perPixel = (2 * d * tanY) / vh;
+    const dx = (rect.x - box.left + rect.width / 2 - vw / 2) * perPixel;
+    const dy = (rect.y - box.top + rect.height / 2 - vh / 2) * perPixel;
+    const s = Math.sin(base);
+    const c = Math.cos(base);
+    // Looking at the wall: outwards for the outer wall, inwards for the inner one. Back off along that
+    // direction, then shift sideways so the print lands where the rect is.
+    const fx = outer ? s : -s;
+    const fz = outer ? c : -c;
+    const x = r * s - fx * d + fz * dx;
+    const z = r * c - fz * d - fx * dx;
+    return {
+      angle: nearestEquivalent(Math.atan2(x, z), base),
+      radius: Math.hypot(x, z),
+      y: ROOM.photoY + dy,
+      heading: nearestEquivalent(outer ? base + Math.PI : base, from.heading),
+      pitch: 0,
+    };
+  };
+
+  const mix = (from: Pose, to: Pose, t: number, smooth: boolean): Pose => {
+    const heading = nearestEquivalent(to.heading, from.heading);
+    if (smooth) {
+      const e = easeInOutCubic(t);
+      return {
+        angle: from.angle + (to.angle - from.angle) * e,
+        radius: from.radius + (to.radius - from.radius) * e,
+        y: from.y + (to.y - from.y) * e,
+        heading: from.heading + (heading - from.heading) * e,
+        pitch: from.pitch + (to.pitch - from.pitch) * e,
+      };
+    }
+    const c = easeOutCubic(t);
+    return {
+      angle: from.angle + (to.angle - from.angle) * easeOutQuart(t),
+      radius: from.radius + (to.radius - from.radius) * c,
+      y: from.y + (to.y - from.y) * c,
+      heading: from.heading + (heading - from.heading) * easeOutQuad(t),
+      pitch: from.pitch + (to.pitch - from.pitch) * c,
+    };
+  };
+
+  const glideFrom = (duration: number, smooth = false) => {
+    glide = options.reducedMotion || duration <= 0 ? null : { from: { ...pose }, start: now, duration, smooth };
+    dirty = true;
+  };
+
+  /** A long way round the ring: dip the view out and back in rather than spin the camera. */
+  const cutTo = (apply: () => void) => {
+    if (options.reducedMotion) {
+      apply();
+      glide = null;
+      dirty = true;
+      return;
+    }
+    canvas.style.opacity = '0';
+    later(() => {
+      // The next frame finds the camera somewhere new and moves it there in one step, map dot and all.
+      apply();
+      glide = null;
+      dirty = true;
+      canvas.style.opacity = '1';
+    }, 180);
+  };
+
+  let hasMoved = false;
+  const moved = () => {
+    if (hasMoved) return;
+    hasMoved = true;
+    cb.onMove();
+  };
+
+  const focusSlot = (k: number) => {
+    if (count === 0 || mode === 'dive') return;
+    const index = ((k % count) + count) % count;
+    moved();
+    const next = focusPoseFor(index, pose);
+    const far = Math.abs(next.angle - pose.angle) > WALK.jump;
+    const distance = Math.abs(next.angle - pose.angle) * plan.walkRadius;
+    mode = 'focus';
+    focusK = index;
+    target = next;
+    if (far) cutTo(() => undefined);
+    else glideFrom(950 + Math.min(650, distance * 45));
+    want(index, 3);
+    cb.onFocus(index);
+    schedule();
+  };
+
+  /** Back to walking, from a print or from the title wall. */
+  const toWalk = (angle: number) => {
+    const wasFocus = mode === 'focus';
+    mode = 'walk';
+    focusK = null;
+    a = aTarget = angle;
+    glideFrom(800);
+    if (wasFocus) cb.onFocus(null);
+    schedule();
+  };
+  const unfocus = () => {
+    if (mode === 'focus') toWalk(pose.angle - ahead * 0.85);
+  };
+  const leave = () => {
+    if (mode === 'intro') toWalk(pose.angle);
+    else if (mode === 'focus') unfocus();
+  };
+
+  const walkBy = (distance: number) => {
+    if (mode === 'dive') return;
+    leave();
+    aTarget += distance / plan.walkRadius;
+    moved();
+  };
+
+  // ── Textures ───────────────────────────────────────────────────────────────────────────────────────────
+  const loader = new TextureLoader();
+  let inflight = 0;
+
+  /** In prints, from the point the visitor is looking at, either way round. */
+  const photoDistance = (i: number): number => {
+    const view = focusK !== null ? plan.slots[focusK]!.angle : pose.angle + ahead;
+    return Math.abs(towards(i, view)) / plan.unit;
+  };
+
+  const show = (i: number) => {
+    const state = states[i]!;
+    let level: Level | null = null;
+    for (let l = state.want; l >= 0; l--) {
+      if (state.textures[l as Level]) {
+        level = l as Level;
+        break;
+      }
+    }
+    // Drop sharper copies that are no longer wanted (the 480 and the ThumbHash stay).
+    for (const l of [2, 3] as const) {
+      if (l > state.want && state.textures[l]) {
+        state.textures[l]!.dispose();
+        delete state.textures[l];
+      }
+    }
+    const map = level === null ? null : state.textures[level]!;
+    if (state.material.map !== map) {
+      state.material.map = map;
+      state.material.color.set(map ? 0xffffff : COLORS.blank);
+      state.material.needsUpdate = true;
+      dirty = true;
+      // Paused behind the lightbox, but standing in a print: draw it as soon as its sharper copy lands.
+      if (paused) renderer.render(scene, camera);
+    }
+  };
+
+  const want = (i: number, level: Level) => {
+    const state = states[i]!;
+    if (state.want === level) return;
+    state.want = level;
+    show(i);
+    pump();
+  };
+
+  const load = (i: number, level: Level) => {
+    const state = states[i]!;
+    const photo = photos[i]!;
+    const url = level === 0 ? placeholderDataUrl(photo.placeholder) : imageUrl(photo.id, photo.version, LEVEL_SIZE[level as 1 | 2 | 3]);
+    if (!url) return;
+    state.loading.add(level);
+    inflight++;
+    loader
+      .loadAsync(url)
+      .then((texture) => {
+        if (disposed || (level > 1 && state.want < level)) {
+          texture.dispose();
+          return;
+        }
+        texture.colorSpace = SRGBColorSpace;
+        if (level === 0) {
+          texture.generateMipmaps = false;
+          texture.minFilter = LinearFilter;
+        } else {
+          texture.anisotropy = anisotropy;
+        }
+        state.textures[level]?.dispose();
+        state.textures[level] = texture;
+        show(i);
+      })
+      .catch(() => {
+        /* the print keeps its lower level; a later pass may retry */
+      })
+      .finally(() => {
+        state.loading.delete(level);
+        inflight--;
+        if (!disposed) pump();
+      });
+  };
+
+  /** Start the most useful loads: the focused print, sharp copies of nearby ones, then every 480 by distance. */
+  const pump = () => {
+    while (inflight < 4) {
+      let bestI = -1;
+      let bestLevel: Level = 1;
+      let bestScore = Infinity;
+      for (let i = 0; i < count; i++) {
+        const state = states[i]!;
+        const d = photoDistance(i);
+        const jobs: [Level, number][] = [[1, d]];
+        if (state.want >= 2) jobs.push([state.want, state.want === 3 ? -1000 : d - 40]);
+        for (const [level, score] of jobs) {
+          if (state.textures[level] || state.loading.has(level) || score >= bestScore) continue;
+          bestI = i;
+          bestLevel = level;
+          bestScore = score;
+        }
+      }
+      if (bestI < 0) return;
+      load(bestI, bestLevel);
+    }
+  };
+
+  // Placeholders first (data URLs, instant), then the real images.
+  photos.forEach((photo, i) => {
+    if (photo.placeholder) load(i, 0);
+  });
+
+  let lastScheduled = Infinity;
+  /** Sharper textures within a few bays of the view, with hysteresis so they don't flicker. */
+  const schedule = () => {
+    for (let i = 0; i < count; i++) {
+      const state = states[i]!;
+      if (state.want === 3 && focusK === i) continue;
+      const d = photoDistance(i);
+      const next: Level = d < 2.6 ? 2 : d > 4 ? 1 : state.want === 3 ? 2 : state.want;
+      if (next !== state.want) want(i, next);
+    }
+    pump();
+  };
+
+  // ── Labels (after the fonts load) ──────────────────────────────────────────────────────────────────────
+  void Promise.all([
+    document.fonts.load('500 72px "Barlow Condensed"'),
+    document.fonts.load('500 28px "Barlow"'),
+    document.fonts.load('400 22px "Barlow"'),
+  ])
+    .catch(() => undefined)
+    .then(() => {
+      if (disposed) return;
+      photos.forEach((photo, i) => {
+        const texture = labelTexture(photo);
+        if (!texture) return;
+        texture.anisotropy = anisotropy;
+        const material = states[i]!.label;
+        material.map = keep(texture);
+        material.visible = true;
+        material.needsUpdate = true;
+      });
+      drawTitle(titleTex, title);
+      dirty = true;
+    });
+
+  // ── Size ───────────────────────────────────────────────────────────────────────────────────────────────
+  const resize = () => {
+    const width = host.clientWidth || 1;
+    const height = host.clientHeight || 1;
+    renderer.setSize(width, height);
+    camera.aspect = width / height;
+    portrait = camera.aspect < 0.8;
+    camera.fov = portrait ? 62 : 56;
+    camera.updateProjectionMatrix();
+    if (mode === 'focus' && focusK !== null) target = focusPoseFor(focusK, target);
+    if (mode === 'intro') target = introPose();
+    dirty = true;
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(host);
+  resize();
+  if (mode === 'intro') pose = { ...target };
+
+  // ── Input ──────────────────────────────────────────────────────────────────────────────────────────────
+  const raycaster = new Raycaster();
+  const pointer = new Vector2();
+  const hit = (clientX: number, clientY: number): number | null => {
+    const rect = canvas.getBoundingClientRect();
+    pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    raycaster.far = 40;
+    const first = raycaster.intersectObjects([...occluders, ...pickables], false)[0];
+    const index = first?.object.userData.photo;
+    return typeof index === 'number' ? index : null;
+  };
+
+  let drag: { id: number; lastX: number; lastY: number; travelled: number; touch: boolean; dragging: boolean } | null = null;
+  let hover: { x: number; y: number } | null = null;
+
+  const onWheel = (e: WheelEvent) => {
+    if (paused) return;
+    e.preventDefault();
+    if (e.ctrlKey) return; // pinch-zoom on a trackpad
+    const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const delta = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * scale;
+    walkBy(delta * WALK.wheel);
+  };
+  const onPointerDown = (e: PointerEvent) => {
+    if (paused || !e.isPrimary || e.button !== 0) return;
+    drag = { id: e.pointerId, lastX: e.clientX, lastY: e.clientY, travelled: 0, touch: e.pointerType !== 'mouse', dragging: false };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* the pointer is already gone; the drag simply ends at the canvas edge */
+    }
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (paused) return;
+    if (!drag || e.pointerId !== drag.id) {
+      if (e.pointerType === 'mouse') hover = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    const dx = e.clientX - drag.lastX;
+    const dy = e.clientY - drag.lastY;
+    drag.lastX = e.clientX;
+    drag.lastY = e.clientY;
+    drag.travelled += Math.abs(dx) + Math.abs(dy);
+    if (!drag.dragging && drag.travelled > 6) {
+      drag.dragging = true;
+      canvas.style.cursor = 'grabbing';
+    }
+    if (drag.dragging) walkBy(-(Math.abs(dx) > Math.abs(dy) ? dx : dy) * (drag.touch ? WALK.dragTouch : WALK.drag));
+  };
+  const onPointerUp = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const wasDrag = drag.dragging;
+    drag = null;
+    canvas.style.cursor = 'grab';
+    if (wasDrag || paused || mode === 'dive') return;
+    const index = hit(e.clientX, e.clientY);
+    if (index === null) {
+      unfocus();
+      return;
+    }
+    if (mode === 'focus' && focusK === index) {
+      cb.onOpen(index);
+      return;
+    }
+    focusSlot(index);
+  };
+  const onPointerCancel = () => {
+    drag = null;
+    canvas.style.cursor = 'grab';
+  };
+  const onPointerLeave = () => {
+    hover = null;
+  };
+
+  inputRoot.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('pointercancel', onPointerCancel);
+  canvas.addEventListener('pointerleave', onPointerLeave);
+  const blockMenu = (e: Event) => e.preventDefault();
+  canvas.addEventListener('contextmenu', blockMenu);
+
+  // ── Frame loop ─────────────────────────────────────────────────────────────────────────────────────────
+  const placeCamera = () => {
+    camera.position.set(pose.radius * Math.sin(pose.angle), pose.y, pose.radius * Math.cos(pose.angle));
+    camera.rotation.set(pose.pitch, pose.heading, 0);
+    camera.updateMatrixWorld();
+  };
+
+  const probe = new Vector3();
+  const toProbe = new Vector3();
+  /** The print most in view while walking: nearest the middle of the screen, nearer ones preferred, not hidden. */
+  const centralK = (): number | null => {
+    const view = pose.angle + ahead;
+    let bestK: number | null = null;
+    let bestScore = Infinity;
+    for (let k = 0; k < count; k++) {
+      const offset = towards(k, view);
+      if (offset < -0.6 || offset > 1.4) continue;
+      const r = plan.slots[k]!.wall === 'outer' ? RO : RI;
+      const angle = view + offset;
+      probe.set(r * Math.sin(angle), ROOM.photoY, r * Math.cos(angle));
+      toProbe.subVectors(probe, camera.position);
+      const distance = toProbe.length();
+      probe.project(camera);
+      if (probe.z > 1 || Math.abs(probe.x) > 0.95) continue;
+      const score = Math.abs(probe.x) + distance * 0.05;
+      if (score >= bestScore) continue;
+      raycaster.set(camera.position, toProbe.normalize());
+      raycaster.far = distance - 0.2;
+      if (raycaster.intersectObjects(occluders, false).length > 0) continue;
+      bestScore = score;
+      bestK = k;
+    }
+    return bestK;
+  };
+
+  let last = now;
+  let currentPhoto = -1;
+  let hovered: number | null = null;
+  let lastAngle = NaN;
+
+  const frame = (time: number) => {
+    now = time;
+    const dt = Math.min(0.05, Math.max(0, (time - last) / 1000));
+    last = time;
+
+    if (mode === 'walk') {
+      a += (aTarget - a) * (1 - Math.exp(-dt / tau));
+      if (Math.abs(aTarget - a) < 1e-6) a = aTarget;
+    }
+    const live = mode === 'walk' ? walkPose(a) : target;
+    let next = live;
+    if (glide) {
+      const t = clamp01((time - glide.start) / glide.duration);
+      next = mix(glide.from, live, t, glide.smooth);
+      if (t >= 1) glide = null;
+    }
+    const changed =
+      next.angle !== pose.angle || next.radius !== pose.radius || next.y !== pose.y || next.heading !== pose.heading || next.pitch !== pose.pitch;
+    pose = next;
+
+    if (changed) {
+      placeCamera();
+      dirty = true;
+      if (mode === 'walk' && count > 0) {
+        // None in view: the print in the nearest bay ahead.
+        const k = centralK() ?? nearestTo(a + ahead);
+        if (k !== currentPhoto) {
+          currentPhoto = k;
+          cb.onCurrent(k);
+        }
+      }
+      if (Math.abs(pose.angle - lastAngle) > 1e-4 || Number.isNaN(lastAngle)) {
+        lastAngle = pose.angle;
+        cb.onAngle(wrapAngle(pose.angle));
+      }
+      if (Math.abs(pose.angle - lastScheduled) > plan.unit * 0.5) {
+        lastScheduled = pose.angle;
+        schedule();
+      }
+    }
+
+    if (hover && !drag) {
+      const index = hit(hover.x, hover.y);
+      hover = null;
+      if (index !== hovered) {
+        hovered = index;
+        canvas.style.cursor = index === null ? 'grab' : mode === 'focus' && focusK === index ? 'zoom-in' : 'pointer';
+      }
+    }
+
+    if (dirty) {
+      renderer.render(scene, camera);
+      dirty = false;
+    }
+    if (mode === 'dive' && !glide && arrive) {
+      const done = arrive;
+      arrive = null;
+      done();
+    }
+  };
+  placeCamera();
+  cb.onAngle(wrapAngle(pose.angle));
+  schedule();
+  renderer.setAnimationLoop(frame);
+
+  // ── Handle ─────────────────────────────────────────────────────────────────────────────────────────────
+  return {
+    step(dir) {
+      if (paused || count === 0 || mode === 'dive') return;
+      moved();
+      if (mode === 'focus' && focusK !== null) {
+        focusSlot(focusK + dir);
+        return;
+      }
+      if (mode === 'intro') toWalk(pose.angle);
+      aTarget += nextFrom(aTarget + ahead, dir).d;
+    },
+    focusPhoto(photoIndex) {
+      if (mode === 'focus' && focusK === photoIndex) return;
+      focusSlot(photoIndex);
+    },
+    focusCurrent() {
+      if (mode === 'focus' || mode === 'dive' || count === 0) return;
+      if (mode === 'intro') {
+        focusSlot(0);
+        return;
+      }
+      focusSlot(centralK() ?? nearestTo(a + ahead));
+    },
+    unfocus,
+    walkTo(angle) {
+      if (paused || mode === 'dive') return;
+      moved();
+      const from = mode === 'walk' ? aTarget : pose.angle;
+      const to = nearestEquivalent(angle, from);
+      if (Math.abs(to - pose.angle) > WALK.jump) {
+        if (mode === 'focus') cb.onFocus(null);
+        mode = 'walk';
+        focusK = null;
+        cutTo(() => {
+          a = aTarget = to;
+        });
+        return;
+      }
+      leave();
+      aTarget = to;
+    },
+    stepIn(photoIndex, rect, done) {
+      if (paused || photoIndex < 0 || photoIndex >= count) return;
+      mode = 'dive';
+      focusK = photoIndex;
+      target = divePoseFor(photoIndex, rect, pose);
+      want(photoIndex, 3);
+      arrive = done;
+      glideFrom(720, true);
+    },
+    standIn(photoIndex, rect) {
+      if (photoIndex < 0 || photoIndex >= count) return;
+      mode = 'dive';
+      focusK = photoIndex;
+      arrive = null;
+      glide = null;
+      target = divePoseFor(photoIndex, rect, pose);
+      pose = { ...target };
+      want(photoIndex, 3);
+      schedule();
+      placeCamera();
+      renderer.render(scene, camera);
+      cb.onFocus(photoIndex);
+    },
+    stepOut(photoIndex) {
+      if (photoIndex < 0 || photoIndex >= count) return;
+      mode = 'focus';
+      focusK = photoIndex;
+      target = focusPoseFor(photoIndex, pose);
+      glideFrom(850, true);
+      cb.onFocus(photoIndex);
+    },
+    setPaused(value) {
+      if (paused === value) return;
+      paused = value;
+      drag = null;
+      if (paused) renderer.setAnimationLoop(null);
+      else {
+        last = performance.now();
+        now = last;
+        dirty = true;
+        renderer.setAnimationLoop(frame);
+      }
+    },
+    dispose() {
+      disposed = true;
+      renderer.setAnimationLoop(null);
+      for (const id of timers) window.clearTimeout(id);
+      observer.disconnect();
+      inputRoot.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerCancel);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('contextmenu', blockMenu);
+      for (const state of states) for (const texture of Object.values(state.textures)) texture?.dispose();
+      for (const thing of disposables) thing.dispose();
+      for (const mesh of instanced) mesh.dispose();
+      trims.dispose();
+      lenses.dispose();
+      renderer.dispose();
+      canvas.remove();
+    },
+  };
+}
+
+// ── Painted textures ─────────────────────────────────────────────────────────────────────────────────────
+
+function canvasTexture(canvas: HTMLCanvasElement): CanvasTexture {
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** A small deterministic random sequence, so the painted floor is the same on every visit. */
+function seeded(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** An elliptical radial gradient: `rx` across, `ry` up and down. */
+function glow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, stops: [number, string][]) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, ry / rx);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  for (const [at, color] of stops) g.addColorStop(at, color);
+  ctx.fillStyle = g;
+  ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
+  ctx.restore();
+}
+
+/**
+ * One wall bay (one print's width of wall): warm plaster, slightly darker under the ceiling and towards the
+ * floor, with the pool of light the recessed spot throws round the print. `aspect` is the bay's width / height.
+ */
+function wallTexture(aspect: number, pool = true): CanvasTexture {
+  const height = 512;
+  const width = Math.round(Math.min(1024, Math.max(256, height * aspect)));
+  const unit = height / ROOM.wallHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = COLORS.wall;
+  ctx.fillRect(0, 0, width, height);
+
+  let g = ctx.createLinearGradient(0, 0, 0, height * 0.3);
+  g.addColorStop(0, `rgba(${COLORS.shade},0.12)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  g = ctx.createLinearGradient(0, height * 0.62, 0, height);
+  g.addColorStop(0, `rgba(${COLORS.shade},0)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0.16)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+
+  // The pool round the print, and the brighter scallop where the beam first meets the wall; a wall without
+  // prints (the column) gets an even wash instead. Pools are kept within the bay, so neighbours meet without
+  // a seam.
+  const cx = width / 2;
+  if (!pool) {
+    const wash = ctx.createLinearGradient(0, height * 0.15, 0, height * 0.85);
+    wash.addColorStop(0, `rgba(${COLORS.light},0)`);
+    wash.addColorStop(0.45, `rgba(${COLORS.light},0.4)`);
+    wash.addColorStop(1, `rgba(${COLORS.light},0)`);
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, width, height);
+  }
+  if (pool) glow(ctx, cx, height - (ROOM.photoY + 0.2) * unit, Math.min(2.1 * unit, width / 2), 2.6 * unit, [
+    [0, `rgba(${COLORS.light},0.9)`],
+    [0.45, `rgba(${COLORS.light},0.5)`],
+    [1, `rgba(${COLORS.light},0)`],
+  ]);
+  if (pool) glow(ctx, cx, height - (ROOM.wallHeight - 1.05) * unit, Math.min(1.05 * unit, width * 0.4), 1.5 * unit, [
+    [0, `rgba(${COLORS.light},0.45)`],
+    [1, `rgba(${COLORS.light},0)`],
+  ]);
+
+  // Shadow gap where the wall meets the floor.
+  ctx.fillStyle = `rgba(${COLORS.shade},0.55)`;
+  ctx.fillRect(0, height - 0.035 * unit, width, 0.035 * unit);
+
+  const texture = canvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  return texture;
+}
+
+/**
+ * One bay of half the floor, pale oak boards running along the corridor: darker where it meets its wall, with
+ * the spill of light under that wall's print. The canvas's top row is the outer edge of its strip (v = 1), so
+ * the outer half has its wall at the top and the inner half at the bottom.
+ */
+function floorTexture(edge: Wall, pool = true): CanvasTexture {
+  const width = 512;
+  const height = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  const random = seeded(edge === 'outer' ? 7 : 11);
+  const rows = 17;
+  const rowH = height / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = r * rowH;
+    ctx.fillStyle = `hsl(35 24% ${71 + random() * 3.5}%)`;
+    ctx.fillRect(0, y, width, rowH);
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = `rgba(${COLORS.shade},${0.015 + random() * 0.025})`;
+      ctx.fillRect(0, y + random() * rowH, width, 1 + random() * 1.5);
+    }
+    ctx.fillStyle = `rgba(${COLORS.shade},0.16)`;
+    const ends = 1 + Math.floor(random() * 2);
+    for (let i = 0; i < ends; i++) ctx.fillRect(Math.floor(random() * width), y, 1.5, rowH);
+    ctx.fillStyle = `rgba(${COLORS.shade},0.12)`;
+    ctx.fillRect(0, y, width, 1.25);
+  }
+  const wallY = edge === 'outer' ? 0 : height;
+  const g = ctx.createLinearGradient(0, wallY, 0, edge === 'outer' ? height * 0.14 : height * 0.86);
+  g.addColorStop(0, `rgba(${COLORS.shade},0.22)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  if (pool) glow(ctx, width / 2, wallY, width * 0.45, height * 0.6, [
+    [0, `rgba(${COLORS.light},0.5)`],
+    [1, `rgba(${COLORS.light},0)`],
+  ]);
+  const texture = canvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  return texture;
+}
+
+/** A soft rectangle of shade, stretched behind each frame. */
+function shadowTexture(): CanvasTexture {
+  const size = 256;
+  const pad = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  // Draw the rectangle off-canvas and keep only its blurred shadow.
+  ctx.shadowColor = `rgba(${COLORS.shade},0.9)`;
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetX = size * 4;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(pad - size * 4, pad, size - 2 * pad, size - 2 * pad);
+  return canvasTexture(canvas);
+}
+
+/** Fits `text` into `max` pixels in the context's current font, with an ellipsis if it must be cut. */
+function fit(ctx: CanvasRenderingContext2D, text: string, max: number): string {
+  if (ctx.measureText(text).width <= max) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > max) t = t.slice(0, -1);
+  return `${t.trimEnd()}…`;
+}
+
+function tracking(ctx: CanvasRenderingContext2D, value: string) {
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = value;
+}
+
+/** The title wall's lines, lettered straight onto the outer wall at eye level. Drawn again once the fonts load. */
+function titleTexture(title: RoomTitle): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1600;
+  canvas.height = 200;
+  const texture = canvasTexture(canvas);
+  drawTitle(texture, title);
+  return texture;
+}
+
+function drawTitle(texture: CanvasTexture, title: RoomTitle) {
+  const canvas = texture.image as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '500 46px "Barlow", sans-serif';
+  tracking(ctx, '11px');
+  ctx.fillStyle = COLORS.meta;
+  const y = 64;
+  title.lines.forEach((line, i) => ctx.fillText(fit(ctx, line.toUpperCase(), canvas.width - 30), 16, y + i * 74));
+  texture.needsUpdate = true;
+}
+
+/**
+ * The wall label under a print: the title in the display face; the exposure as figures, with ƒ and the units
+ * small like the info panel's spec sheet; then place and year in small caps. Missing lines are left out.
+ */
+function labelTexture(photo: PublicPhoto): CanvasTexture | null {
+  const title = photo.title?.trim() || null;
+  const year = photo.takenAt?.slice(0, 4) || null;
+  const meta = [photo.location?.name ?? null, year].filter(Boolean).join(' · ') || null;
+  const figures = exposureFigures(photo);
+  if (!title && !meta && figures.length === 0) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 300;
+  const ctx = canvas.getContext('2d')!;
+  ctx.textBaseline = 'alphabetic';
+  let y = 0;
+  if (title) {
+    y += 70;
+    ctx.font = '500 70px "Barlow Condensed", sans-serif';
+    ctx.fillStyle = COLORS.ink;
+    ctx.fillText(fit(ctx, title, 1010), 4, y);
+  }
+  if (figures.length > 0) {
+    y += title ? 64 : 50;
+    let x = 4;
+    const small = (text: string) => {
+      ctx.font = '400 24px "Barlow", sans-serif';
+      tracking(ctx, '1px');
+      ctx.fillStyle = COLORS.meta;
+      ctx.fillText(text, x, y);
+      x += ctx.measureText(text).width;
+      tracking(ctx, '0px');
+    };
+    const big = (text: string, italic = false) => {
+      ctx.font = `${italic ? 'italic ' : ''}500 46px "Barlow Condensed", sans-serif`;
+      ctx.fillStyle = COLORS.figure;
+      ctx.fillText(text, x, y);
+      x += ctx.measureText(text).width;
+    };
+    for (const f of figures) {
+      if (f.key === 'iso') {
+        small('ISO ');
+        big(f.value);
+      } else if (f.key === 'aperture') {
+        big('f', true);
+        big(`/${f.value}`);
+      } else {
+        big(f.value);
+        if (f.unit) small(` ${f.unit}`);
+      }
+      x += 30;
+    }
+  }
+  if (meta) {
+    y += title || figures.length > 0 ? 50 : 40;
+    ctx.font = '500 26px "Barlow", sans-serif';
+    tracking(ctx, '5px');
+    ctx.fillStyle = COLORS.meta;
+    ctx.fillText(fit(ctx, meta.toUpperCase(), 1010), 4, y);
+  }
+  return canvasTexture(canvas);
+}

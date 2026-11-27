@@ -550,3 +550,151 @@
     line-height: 22px;
   }
 }
+
+/* ───────────── Walk-through ───────────── */
+
+/*
+ * The walk-through room is a lit gallery, an exception to "dark only" the owner asked for: inside it, and in
+ * the header floating over it, the tokens invert to dark ink on the room's off-white. The lightbox renders
+ * outside this scope, so it stays black.
+ */
+.tone-light {
+  --color-bg: #e4e0d9;
+  --color-surface: #f2efea;
+  --color-divider: #c6c0b7;
+  --color-ink: #161514;
+  --color-ink-muted: #67625b;
+  color-scheme: light;
+}
+
+/* The header over a full-viewport scene: transparent, and only its links take the pointer. */
+.site-header--overlay {
+  background-color: transparent;
+  pointer-events: none;
+}
+.site-header--overlay > * {
+  pointer-events: auto;
+}
+
+/* "Walk" beside the layout toggle: the same 32 px pill. */
+.walk-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--color-divider);
+  border-radius: 9999px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  transition: color 150ms ease;
+}
+.walk-link:hover {
+  color: var(--color-ink);
+}
+@media (min-width: 640px) {
+  .walk-link {
+    padding: 0 12px 0 9px;
+  }
+}
+
+.walk {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.walk-caption,
+.walk-map,
+.walk-hint {
+  transition:
+    opacity 300ms ease,
+    visibility 300ms ease;
+}
+.walk:not([data-focused]) .walk-caption,
+.walk[data-stepping] .walk-caption,
+.walk[data-stepping] .walk-map,
+.walk[data-focused] .walk-hint,
+.walk[data-moved] .walk-hint {
+  opacity: 0;
+  visibility: hidden;
+}
+/* Phones: the map sits under the header, where a focused frame needs the room. */
+@media (max-width: 639.98px) {
+  .walk[data-focused] .walk-map {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* The room map: a hairline ring with the title wall marked at the top, a tick per print (outside for the
+   outer wall, inside for the inner), and a dot on a hand turned by --walk-angle (radians, clockwise). */
+.walk-map__ring {
+  fill: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  stroke: var(--color-divider);
+  stroke-width: 1;
+}
+.walk-map__tick {
+  stroke: var(--color-ink-muted);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+.walk-map__title {
+  stroke: var(--color-ink);
+  stroke-width: 2.5;
+}
+.walk-map__hand {
+  position: absolute;
+  inset: 0;
+  rotate: calc(var(--walk-angle, 0) * 1rad);
+  pointer-events: none;
+}
+.walk-map__dot {
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  background-color: var(--color-ink);
+  outline: 3px solid var(--color-bg);
+}
+.walk-map__label {
+  max-width: min(42vw, 320px);
+  padding: 2px 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  background-color: color-mix(in srgb, var(--color-bg) 85%, transparent);
+}
+
+/* Round 44 px controls over the room: hairline ring, muted glyph, ink on hover. */
+.walk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-divider);
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  color: var(--color-ink-muted);
+  transition:
+    color 150ms ease,
+    border-color 150ms ease;
+}
+.walk-button:hover {
+  color: var(--color-ink);
+  border-color: var(--color-ink-muted);
+}
+
+/* The focused photo's caption: at most three lines over the room. */
+.walk-caption__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}

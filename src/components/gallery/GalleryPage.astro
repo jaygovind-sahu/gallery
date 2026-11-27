@@ -46,7 +46,18 @@ const ogImage = preview
 ---
 
 <Base title={title} description={description} nav={nav} activeSlug={activeSlug} ogImage={ogImage}>
-  <LayoutToggle slot="header-end" client:load fallback={defaultLayout} initial={initialLayout} />
+  <div slot="header-end" class="flex items-center gap-2">
+    <LayoutToggle client:load fallback={defaultLayout} initial={initialLayout} />
+    {/* The walk-through: every published photo as one room; categories are chosen here, in the grid. */}
+    <a href="/walk" class="walk-link" title="Walk through the gallery">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3.75" y="3.75" width="16.5" height="16.5" rx="1.25" />
+        <path d="M9.5 9h5v6h-5zM3.75 3.75 9.5 9M20.25 3.75 14.5 9M3.75 20.25 9.5 15M20.25 20.25 14.5 15" />
+      </svg>
+      <span class="hidden sm:inline">Walk</span>
+      <span class="sr-only sm:hidden">Walk through the gallery</span>
+    </a>
+  </div>
   {
     heading ? (
       <div class="flex flex-col gap-3 pb-10 pt-14 sm:pb-12 sm:pt-20">

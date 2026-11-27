@@ -51,6 +51,7 @@ src/
     ai-pure.ts          prompt, output schema, tidying, blind-comparison tokens (pure)
     captions.ts         tones, saved-caption rules, hashtags (pure)
     geo.ts              nearest known location for a GPS position (pure)
+    walk.ts             walk-through room geometry: bays round the ring, frames, lightbox rect (pure)
     client/             browser only: http.ts (fetch, XHR upload, retry), metadata.ts (exifr, ThumbHash, previews),
                         suggest.ts (downscaled image for the AI, suggest and vote calls)
   components/
@@ -67,7 +68,7 @@ tests/                  unit/ (Vitest), e2e/ (Playwright), fixtures/ (generated 
 
 ## Module conventions
 
-- **Pure vs Worker code.** Modules that import `cloudflare:workers` (`db.ts`, `originals.ts`, routes) can't run under Vitest or in the browser. Logic worth testing lives in modules with no Worker imports: `gallery.ts`, `images.ts`, `order.ts`, `exif-format.ts`, `originals-pure.ts`, `auth.ts`, `ai-pure.ts`, `captions.ts`, `geo.ts`, `host.ts`. Follow the `originals.ts` / `originals-pure.ts` split when a Worker module grows logic that needs tests.
+- **Pure vs Worker code.** Modules that import `cloudflare:workers` (`db.ts`, `originals.ts`, routes) can't run under Vitest or in the browser. Logic worth testing lives in modules with no Worker imports: `gallery.ts`, `images.ts`, `order.ts`, `exif-format.ts`, `originals-pure.ts`, `auth.ts`, `ai-pure.ts`, `captions.ts`, `geo.ts`, `host.ts`, `walk.ts`. Follow the `originals.ts` / `originals-pure.ts` split when a Worker module grows logic that needs tests.
 - **Islands never touch D1.** Pages load data and pass it as props. Public islands receive `PublicPhoto` objects only. Island props are serialised into the HTML, so anything passed to a `client:*` component is public ([security.md](security.md)).
 - **Admin islands** call `/api/admin/*` through `src/lib/client/http.ts`.
 - **`data-hydrated`.** Each island's root element gets this attribute once it has mounted (`useHydrated` in `components/admin/ui.ts`; `Gallery` does the same). Tests wait on it.

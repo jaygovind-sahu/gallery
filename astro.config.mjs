@@ -56,6 +56,7 @@ export default defineConfig({
         'yet-another-react-lightbox',
         'yet-another-react-lightbox/plugins/zoom',
         'yet-another-react-lightbox/plugins/fullscreen',
+        'three',
         '@dnd-kit/core',
         '@dnd-kit/sortable',
         '@dnd-kit/utilities',
