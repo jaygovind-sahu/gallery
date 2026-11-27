@@ -13,7 +13,7 @@ export type Wall = 'outer' | 'inner';
 export const ROOM = {
   /** Distance between the inner and outer walls. */
   corridor: 6,
-  wallHeight: 4.6,
+  wallHeight: 5.4,
   /**
    * The room's natural size: its inner wall's radius, a gentle curve with the visitor walking well clear of
    * it. A collection too small to fill it repeats round the walls, as an exhibition hang does; a large one
