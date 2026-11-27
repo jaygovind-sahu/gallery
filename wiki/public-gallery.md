@@ -68,9 +68,9 @@ Server-rendered Astro pages, with React islands for the gallery and the layout t
 
 ## Walk-through
 
-Added at the owner's request, outside DESIGN.md's milestones (README → Decisions). The photos hang framed round a lit, ring-shaped corridor that the visitor can walk forever: there is no end to reach.
+Added at the owner's request, outside DESIGN.md's milestones (README → Decisions). The photos hang framed round the outer wall of a lit, ring-shaped corridor that the visitor can walk forever: there is no end to reach. The inner wall carries a fine pencil drawing.
 
-A spiral ramp round an open atrium was tried and dropped: the owner chose the ring because it never stops.
+A spiral ramp round an open atrium was tried and dropped: the owner chose the ring because it never stops. Prints on both walls were tried and dropped: the inner wall is convex, so its prints only face the visitor once beside them, outside a portrait phone's view (30–40° wide). A head turn towards the nearest print on stopping was tried for that and dropped too (README → Decisions).
 
 - **One room, everything in it.** The walk always shows every published photo, by `sort_order`; there is no per-category walk. Categories are chosen in the grid, so the walk's header shows only the site name and a Grid button (`Base` with `nav={null}`), and the page doesn't load the menu.
 - **Entry:** every grid page (`GalleryPage`) has a "Walk" pill beside the layout toggle, linking to `/walk`. The walk page's Grid button goes to `/all`.
@@ -78,32 +78,34 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - `immersive`: no footer, no page scroll, and the header floats over the room (`.site-header--overlay`: transparent, and only its links take the pointer).
   - `immersive` also makes `<html>` full height. Otherwise the lightbox's no-scroll rule (`height: 100%` on body) collapses the page under it, and the room, which measures the canvas to step in and out of prints, would measure 1 px. The room also ignores a collapsed size when resizing.
   - `tone="light"`: the header and the walk root carry `.tone-light`, which redefines the colour tokens as dark ink on the room's off-white, so every `text-ink` / `bg-bg` class inside follows. The lightbox renders outside that scope and stays black.
-- **Geometry** (pure, [walk.ts](../src/lib/walk.ts), unit-tested): `planRoom` gives each wall its own bays, `ROOM.spacing` (3.9) centre to centre, so the longer outer wall holds more. The corridor is always 6.
-  - The title takes the outer wall's bay 0. Prints fill the rest in order of angle, so walking forward passes the photos in order, on whichever wall comes next.
-  - **The room keeps its natural size** (inner radius `ROOM.innerRadius`, 12.2). A collection that would leave it more than half empty repeats round the walls in whole runs, as many as fill it best (`repeats`), and the room is sized to fit them exactly; 13 photos hang four times each.
-  - From about 47 photos each hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
+- **Geometry** (pure, [walk.ts](../src/lib/walk.ts), unit-tested): `planRoom` divides the outer wall into bays (`plan.bays`), `ROOM.spacing` (3.9) centre to centre. The corridor is always 6.
+  - The title takes bay 0. Prints fill the rest in order, so walking forward passes the photos in order.
+  - **The room keeps its natural size** (inner radius `ROOM.innerRadius`, 12.2; 28 prints). A collection that would leave it more than half empty repeats round the wall in whole runs, as many as fill it best (`repeats`), and the room is sized to fit them exactly; 13 photos hang twice each.
+  - From 28 photos each hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
   - Prints are **slots** (`plan.slots`, each with its `photoIndex`). The room works in slots: picking, focus, stepping, the map. Textures, labels and the lightbox work in photos. Stepping into a photo, or back out of it, uses the print the visitor stands at, else the nearest print of that photo.
   - `lightboxRect` is where the lightbox will draw a photo (its padding, the 340 px info panel, real-size cap).
-- **Room:** [walk/room.ts](../src/components/gallery/walk/room.ts) builds walls, floor and ceiling as rings sampled round the angle. Their texture u counts bays, so each bay's light pool lines up with its print.
+  - `walkYaw` is how far the walking view turns towards the inner wall: just far enough that the inner wall takes `ROOM.innerShare` (8%) of the width at eye level, at the left. Lines of sight more than `acos(inner radius / walk radius)` (about 39°) left of the way ahead meet the inner wall, so a narrow portrait screen turns further (about 26°) than a wide one (about 5°). The room sets it on every resize.
+- **Room:** [walk/room.ts](../src/components/gallery/walk/room.ts) builds walls, floor and ceiling as rings sampled round the angle. The outer wall's texture u counts bays, so each bay's light pool lines up with its print; the inner wall's counts stretches of its drawing.
   - Every architectural mesh also blocks clicks, so prints hidden behind the inner wall can't be picked.
-- **Look:** warm off-white plaster, a plain white ceiling with a recessed light over each bay, and pale oak boards running round the corridor.
+- **Look:** warm off-white plaster, a plain white ceiling with a recessed light over each print, and pale oak boards running round the corridor.
   - Every material is unlit, so the prints keep their exact colours. Light and shade are painted into canvas textures: a pool of light round each print, falloff under the ceiling and towards the floor, and spill on the floor.
   - Prints are framed (`framedSize`): a moulding, a white mat that is deeper at the bottom, a bright bevel round the opening, and a soft shadow on the wall below.
   - **Mouldings** (`MOULDINGS` in room.ts) are steps from the outer edge in, each with a face width, a depth off the wall and a finish. Every finish has a shade per face (lit tops, dark undersides), and each is drawn as one instanced mesh.
   - Styles: `gallery` (the default: black, stepped up to a ridge, with a gilt fillet against the mat), `gilt` (a museum gold frame), `walnut` (wide walnut with a gilt fillet) and `plain` (the earlier thin black). `?frame=` shows another, to compare them on the page.
-  - The light pools on each wall follow that wall's bays. The floor is two halves, each with the spill under its own wall's prints. Each wall's light pools follow its own bays.
+  - The floor is two halves: the outer one with the spill under each print, the inner one plain.
+  - **Inner wall drawing** (`drawingTexture`): the same plaster and falloff without the light pools, and 32 thin graphite lines from 0.7 m to 3.8 m that part and swell gently in the middle of the band, like contour lines, with a slow hand's wobble and pressure that rises and falls. One stretch covers about 9 m (`DRAWING_LENGTH`) and repeats a whole number of times round; every wave fits whole cycles across it, so it joins without a seam. It's pale and thin on purpose: background to the prints, never a print itself (no frame, nothing to click).
   - **Wall labels:** title; then the exposure as figures with small units, like the info panel (`exposureFigures`); then place and year. Missing lines are left out.
   - **Title wall:** the visitor arrives facing it, and passes it again each lap. It carries two lines at eye level: "Photographs by …", and the count with the year span.
   - **Exceptions to the hard rules below** (dark only; no gradients; no borders or shadows on photos) apply to this page only. The owner asked for a lighter room with frames on 2026-11-26 (README → Decisions).
 - **Screen:** no title over the scene (it's on the title wall).
-  - **Room map**, bottom right (under the header on phones): a ring with the title wall marked at the top and a tick per print, outside the ring for the outer wall and inside for the inner.
+  - **Room map**, bottom right (under the header on phones): a ring with the title wall marked at the top and a tick per print outside the ring, where the outer wall is.
   - A dot goes round clockwise as the visitor walks. The room sets `--walk-angle` every frame without React. The current print's title sits beside the map.
   - Press or drag on the map to walk to that point, the short way round.
   - A hint at the bottom until the visitor first moves, and the caption with its buttons while standing at a print.
 - **Input:**
   - The wheel and a drag walk with exponential damping, round and round. Moves longer than `WALK.jump` (map jumps, Home) dip the view out and back in instead of spinning the camera.
   - Keys: right, down and Page Down walk on, or move to the next print when standing at one; left, up and Page Up go back. Home returns to the title wall. Enter steps closer, then in; Escape steps back.
-  - **Step into the photo:** View photo, Enter or a second click moves the camera square on to the print, on either wall, until it fills `lightboxRect`. The island preloads that file, then opens the lightbox, whose 250 ms fade makes the room go dark around the print.
+  - **Step into the photo:** View photo, Enter or a second click moves the camera square on to the print until it fills `lightboxRect`. The island preloads that file, then opens the lightbox, whose 250 ms fade makes the room go dark around the print.
   - While the lightbox is open, each slide change puts the camera inside that print (`standIn`), drawn once behind the lightbox. Closing (the lightbox calls `close` after its fade-out) reveals the print where the lightbox had it, then steps back out to stand in front of it. Reduced motion opens the lightbox directly.
 - **Textures:** existing sizes only, so there are no new transformations. Each photo starts as its ThumbHash, then the 480. Prints within a couple of bays of the view get the 1080, and the focused one the 1600; sharper copies are dropped when the visitor walks away.
 - **Fallbacks:** without WebGL, or with no photos, the island shows a line and a link to the grid. `prefers-reduced-motion` cuts the glides and fades and shortens the damping.

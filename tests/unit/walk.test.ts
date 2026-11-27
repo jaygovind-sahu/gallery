@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aheadAngle, focusDistance, framedSize, lightboxRect, nearestEquivalent, photoSize, planRoom, ROOM, wrapAngle } from '../../src/lib/walk';
+import { aheadAngle, focusDistance, framedSize, lightboxRect, nearestEquivalent, photoSize, planRoom, ROOM, walkYaw, wrapAngle } from '../../src/lib/walk';
 
 const TURN = Math.PI * 2;
 
@@ -13,47 +13,44 @@ describe('planRoom', () => {
 
   it('repeats a small collection in whole runs, in order, to fill a room near its natural size', () => {
     const plan = planRoom(13);
-    expect(plan.repeats).toBe(4);
-    expect(plan.slots).toHaveLength(52);
+    expect(plan.repeats).toBe(2);
+    expect(plan.slots).toHaveLength(26);
     plan.slots.forEach((slot, i) => expect(slot.photoIndex).toBe(i % 13));
     expect(plan.innerRadius).toBeGreaterThan(ROOM.innerRadius * 0.8);
     expect(plan.innerRadius).toBeLessThan(ROOM.innerRadius * 1.25);
-    expect(plan.outerBays - 1 + plan.innerBays - 52).toBeLessThan(3);
+    expect(plan.bays - 1 - 26).toBeLessThan(2);
   });
 
   it('hangs a large collection once, in a room just big enough', () => {
-    for (const count of [60, 200]) {
+    for (const count of [30, 60, 200]) {
       const plan = planRoom(count);
       expect(plan.repeats).toBe(1);
       expect(plan.slots.map((s) => s.photoIndex)).toEqual([...Array(count).keys()]);
       expect(plan.innerRadius).toBeGreaterThanOrEqual(ROOM.innerRadius);
-      expect(plan.outerBays - 1 + plan.innerBays - count).toBeLessThan(3);
+      expect(plan.bays - 1 - count).toBeLessThan(2);
     }
   });
 
   it('never shrinks the room below its smallest size', () => {
-    for (const count of [1, 13, 30, 40, 46]) expect(planRoom(count).innerRadius).toBeGreaterThanOrEqual(ROOM.minInnerRadius);
+    for (const count of [1, 5, 13, 20, 27]) expect(planRoom(count).innerRadius).toBeGreaterThanOrEqual(ROOM.minInnerRadius);
   });
 
-  it('keeps prints in order of angle round the ring, after the title, on both walls', () => {
-    const plan = planRoom(40);
-    for (let i = 0; i < plan.slots.length; i++) {
-      expect(plan.slots[i]!.angle).toBeGreaterThan(plan.titleAngle);
-      expect(plan.slots[i]!.angle).toBeLessThan(TURN);
-      if (i > 0) expect(plan.slots[i]!.angle).toBeGreaterThanOrEqual(plan.slots[i - 1]!.angle);
-    }
-    expect(plan.slots.some((s) => s.wall === 'inner')).toBe(true);
-    expect(plan.slots.some((s) => s.wall === 'outer')).toBe(true);
+  it('hangs prints one to a bay round the outer wall, in order, after the title', () => {
+    const plan = planRoom(20);
+    plan.slots.forEach((slot, i) => {
+      expect(slot.angle).toBeCloseTo(((i + 1) * TURN) / plan.bays);
+      expect(slot.angle).toBeGreaterThan(plan.titleAngle);
+      expect(slot.angle).toBeLessThan(TURN);
+    });
+    expect(plan.unit).toBeCloseTo(TURN / plan.bays);
   });
 
-  it('spaces both walls the same distance apart, so the longer outer wall holds more', () => {
+  it('spaces the prints a little more than the spacing apart along the outer wall', () => {
     for (const count of [13, 60, 200]) {
       const plan = planRoom(count);
-      for (const arc of [(TURN * plan.outerRadius) / plan.outerBays, (TURN * plan.innerRadius) / plan.innerBays]) {
-        expect(arc).toBeGreaterThanOrEqual(ROOM.spacing);
-        expect(arc).toBeLessThan(ROOM.spacing * 1.2);
-      }
-      expect(plan.outerBays).toBeGreaterThan(plan.innerBays);
+      const arc = (TURN * plan.outerRadius) / plan.bays;
+      expect(arc).toBeGreaterThanOrEqual(ROOM.spacing);
+      expect(arc).toBeLessThan(ROOM.spacing * 1.2);
     }
   });
 
@@ -65,6 +62,30 @@ describe('planRoom', () => {
       expect(plan.walkRadius).toBeLessThan(plan.outerRadius);
       expect(aheadAngle(plan) * plan.walkRadius).toBeCloseTo(3.4);
     }
+  });
+});
+
+describe('walkYaw', () => {
+  it('turns until the inner wall takes the given share of the view at the left', () => {
+    const plan = planRoom(13);
+    const tangent = Math.acos(plan.innerRadius / plan.walkRadius);
+    for (const tanHalfWidth of [0.27, 0.34, 0.85, 1.3]) {
+      const yaw = walkYaw(plan, tanHalfWidth, 0.08);
+      // Where the inner wall's edge lands across the view: -1 is the left edge, 1 the right.
+      const x = -Math.tan(tangent - yaw) / tanHalfWidth;
+      expect((x + 1) / 2).toBeCloseTo(0.08);
+    }
+  });
+
+  it('turns further on a narrow portrait screen than on a wide one', () => {
+    const plan = planRoom(13);
+    const phone = walkYaw(plan, 0.27);
+    const desktop = walkYaw(plan, 0.85);
+    expect(phone).toBeGreaterThan(desktop);
+    expect(phone).toBeGreaterThan(0.3);
+    expect(phone).toBeLessThan(0.6);
+    expect(desktop).toBeGreaterThan(-0.1);
+    expect(desktop).toBeLessThan(0.3);
   });
 });
 

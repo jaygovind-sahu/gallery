@@ -64,15 +64,12 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
   const viewed = useRef(0);
   const reducedMotion = useRef(false);
 
-  // The map's marks: the title wall, and a tick per print, outside the circle for the outer wall and inside
-  // for the inner, so it reads as a floor plan.
-  const marks = useMemo(() => {
-    const plan = planRoom(photos.length);
-    return plan.slots.map((s, i) => {
-      const [r0, r1] = s.wall === 'outer' ? [MAP.radius + 2, MAP.radius + 6] : [MAP.radius - 6, MAP.radius - 2];
-      return { key: i, from: onMap(r0, s.angle), to: onMap(r1, s.angle) };
-    });
-  }, [photos.length]);
+  // The map's marks: the title wall, and a tick per print outside the circle, where the outer wall is, so it
+  // reads as a floor plan.
+  const marks = useMemo(
+    () => planRoom(photos.length).slots.map((s, i) => ({ key: i, from: onMap(MAP.radius + 2, s.angle), to: onMap(MAP.radius + 6, s.angle) })),
+    [photos.length],
+  );
 
   /** Where the lightbox will draw photo i on this screen. */
   const rectFor = useCallback(

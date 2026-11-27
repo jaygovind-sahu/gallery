@@ -1,8 +1,8 @@
 /**
- * The walk-through: a lit gallery shaped as a ring-shaped corridor that never ends. Framed,
- * matted prints hang on both walls, the exhibition title on the outer wall where each lap begins. The light
- * is painted into the textures rather than computed, so every surface is an unlit material and the prints
- * keep their exact colours. Browser only; the island loads it `client:only`.
+ * The walk-through: a lit gallery shaped as a ring-shaped corridor that never ends. Framed, matted prints
+ * hang on the outer wall, the exhibition title among them where each lap begins; the inner wall carries a
+ * fine pencil drawing. The light is painted into the textures rather than computed, so every surface is an
+ * unlit material and the prints keep their exact colours. Browser only; the island loads it `client:only`.
  *
  * The visitor arrives facing the title wall, walks round (wheel, drag, keys, the map), clicks a print to
  * stand in front of it, and from there steps into it: the camera moves until the print sits exactly where
@@ -52,6 +52,7 @@ import {
   photoSize,
   planRoom,
   ROOM,
+  walkYaw,
   wrapAngle,
   type Rect,
   type Wall,
@@ -121,9 +122,7 @@ const MOULDINGS: Record<FrameStyle, { width: number; depth: number; finish: Fini
 };
 
 const WALK = {
-  /** Turn from the direction of travel towards the inner wall, so both walls are in view. */
-  yaw: 0.3,
-  yawPortrait: 0.34,
+  // The turn from the direction of travel towards the inner wall depends on the screen: `walkYaw`.
   pitch: -0.04,
   /** World units walked per wheel pixel and per dragged pixel (mouse / touch). */
   wheel: 0.022,
@@ -286,7 +285,7 @@ export function createRoom(
   // coordinates follow it: u counts bays, so each bay's light pool lines up with its print. Every
   // architectural mesh also blocks clicks, so prints hidden behind the inner wall can't be picked.
   const occluders: Mesh[] = [];
-  const SEGMENTS = Math.max(160, (plan.outerBays + plan.innerBays) * 10);
+  const SEGMENTS = Math.max(240, plan.bays * 16);
   const geometry = (position: number[], uv: number[], index: number[]) => {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(position, 3));
@@ -327,13 +326,15 @@ export function createRoom(
     return geometry(position, uv, index);
   };
   const lit = (texture: Texture) => keep(new MeshBasicMaterial({ map: texture, side: DoubleSide }));
-  // Each wall has its own bays (outer ones centred on whole steps, inner ones half a step on), so the floor is
-  // two halves, each with the spill under its own wall's prints.
-  const outerStep = TURN / plan.outerBays;
-  const innerStep = TURN / plan.innerBays;
+  // The outer wall's bays are centred on whole steps, one print (or the title) and its pool of light each. The
+  // inner wall repeats one stretch of the drawing a whole number of times round. The floor is two halves: the
+  // outer one with the spill under each print, the inner one plain, its boards the same length.
+  const outerStep = TURN / plan.bays;
+  const innerStep = TURN / Math.max(1, Math.floor((TURN * RI) / ROOM.spacing));
+  const drawingStep = TURN / Math.max(1, Math.round((TURN * RI) / DRAWING_LENGTH));
   const mid = (RI + RO) / 2;
   add(wallRing(RO, (t) => t / outerStep + 0.5), lit(keep(wallTexture((RO * outerStep) / H))));
-  add(wallRing(RI, (t) => t / innerStep), lit(keep(wallTexture((RI * innerStep) / H))));
+  add(wallRing(RI, (t) => t / drawingStep), lit(keep(drawingTexture((RI * drawingStep) / H, anisotropy))));
   add(flatRing(RI, mid, 0, (t) => t / innerStep), lit(keep(floorTexture('inner'))));
   add(flatRing(mid, RO, 0, (t) => t / outerStep + 0.5), lit(keep(floorTexture('outer'))));
   add(flatRing(RI, RO, H, () => 0), keep(new MeshBasicMaterial({ color: COLORS.ceiling, side: DoubleSide })));
@@ -378,9 +379,9 @@ export function createRoom(
     return mesh;
   };
   const lightDummy = new Object3D();
-  /** A recessed light in the ceiling over a bay, a little way out from the wall: trim ring, then lens. */
-  const hangLight = (n: number, angle: number, wall: Wall) => {
-    const r = wall === 'outer' ? RO - LIGHT_OFFSET : RI + LIGHT_OFFSET;
+  /** A recessed light in the ceiling over a bay, a little way out from the outer wall: trim ring, then lens. */
+  const hangLight = (n: number, angle: number) => {
+    const r = RO - LIGHT_OFFSET;
     for (const [mesh, radius, drop] of [
       [trims, 0.105, 0.003],
       [lenses, 0.08, 0.006],
@@ -391,17 +392,15 @@ export function createRoom(
       mesh.setMatrixAt(n, lightDummy.matrix);
     }
   };
-  /** A group on a wall at angle θ, facing into the corridor, its origin on the floor. */
-  const onWall = (angle: number, wall: Wall, halfExtent: number) => {
-    const outer = wall === 'outer';
-    // Flat things on the concave outer wall stand off far enough that their edges clear it.
-    const r = outer ? RO - (halfExtent * halfExtent) / (2 * RO) - 0.01 : RI + 0.004;
+  /** A group on the outer wall at angle θ, facing into the corridor, its origin on the floor. */
+  const onWall = (angle: number, halfExtent: number) => {
+    // Flat things on the concave wall stand off far enough that their edges clear it.
+    const r = RO - (halfExtent * halfExtent) / (2 * RO) - 0.01;
     const s = Math.sin(angle);
     const c = Math.cos(angle);
-    const facing = outer ? -1 : 1;
     const group = new Group();
     group.position.set(r * s, 0, r * c);
-    group.lookAt(group.position.x + facing * s, 0, group.position.z + facing * c);
+    group.lookAt(group.position.x - s, 0, group.position.z - c);
     group.updateMatrixWorld();
     scene.add(group);
     return { group, r };
@@ -410,21 +409,20 @@ export function createRoom(
   const titleTex = keep(titleTexture(title));
   const TITLE_W = 2.5;
   const TITLE_H = (TITLE_W * 200) / 1600;
-  onWall(plan.titleAngle, 'outer', TITLE_W / 2).group.add(
+  onWall(plan.titleAngle, TITLE_W / 2).group.add(
     plane(keep(new MeshBasicMaterial({ map: titleTex, transparent: true, depthWrite: false, toneMapped: false })), TITLE_W, TITLE_H, 0, 1.8, 0.004),
   );
-  hangLight(prints, plan.titleAngle, 'outer');
+  hangLight(prints, plan.titleAngle);
 
   const pickables: Mesh[] = [];
-  /** Per print (slot): where its surface is, for stepping into it. */
-  const surface: { r: number; outer: boolean }[] = [];
+  /** Per print (slot): the radius of its surface, for stepping into it. */
+  const surface: number[] = [];
   const barDummy = new Object3D();
   plan.slots.forEach((slot, n) => {
     const k = slot.photoIndex;
     const { w, h, outerW, outerH, centreY } = sizes[k]!;
-    const outer = slot.wall === 'outer';
-    const { group, r } = onWall(slot.angle, slot.wall, Math.max((outerW * SHADOW_SCALE) / 2, LABEL_W - outerW / 2));
-    surface[n] = { r: outer ? r - Z.print : r + Z.print, outer };
+    const { group, r } = onWall(slot.angle, Math.max((outerW * SHADOW_SCALE) / 2, LABEL_W - outerW / 2));
+    surface[n] = r - Z.print;
     const frameY = ROOM.photoY + centreY;
     const state = states[k]!;
     // Light comes from above, so the shadow falls a little below the frame.
@@ -462,7 +460,7 @@ export function createRoom(
       inset += sw;
     }
     group.remove(barDummy);
-    hangLight(n, slot.angle, slot.wall);
+    hangLight(n, slot.angle);
   });
   const box = keep(new BoxGeometry(1, 1, 1));
   const instanced: InstancedMesh[] = [];
@@ -482,12 +480,14 @@ export function createRoom(
 
   // ── Camera ─────────────────────────────────────────────────────────────────────────────────────────────
   let portrait = false;
+  /** Turned from the way ahead towards the inner wall, just far enough that it shows as a sliver (`resize`). */
+  let yaw = 0;
   const tau = options.reducedMotion ? WALK.tauReduced : WALK.tau;
   const walkPose = (a: number): Pose => ({
     angle: a,
     radius: plan.walkRadius,
     y: ROOM.eyeY,
-    heading: a - Math.PI / 2 + (portrait ? WALK.yawPortrait : WALK.yaw),
+    heading: a - Math.PI / 2 + yaw,
     pitch: WALK.pitch,
   });
   /** The heading that looks from (angle, radius) towards a point. */
@@ -524,14 +524,13 @@ export function createRoom(
     // Frame plus the three-line label under it.
     const d = focusDistance(outerW, outerH + 0.6, camera.fov, camera.aspect);
     const angle = nearestEquivalent(slot.angle, from.angle);
-    const outer = slot.wall === 'outer';
     const tanY = Math.tan((camera.fov * Math.PI) / 360);
     return {
       angle,
-      radius: outer ? RO - d : RI + d,
+      radius: RO - d,
       // Centred on frame and label, then a little lower, so the frame sits above the caption bar.
       y: ROOM.photoY - 0.25 - d * tanY * (portrait ? 0.24 : 0.14),
-      heading: nearestEquivalent(outer ? angle + Math.PI : angle, from.heading),
+      heading: nearestEquivalent(angle + Math.PI, from.heading),
       pitch: 0,
     };
   };
@@ -539,7 +538,7 @@ export function createRoom(
   /** Where to stand so print k fills `rect` on screen: straight in front of it, square on. */
   const divePoseFor = (k: number, rect: Rect, from: Pose): Pose => {
     const base = nearestEquivalent(plan.slots[k]!.angle, from.angle);
-    const { r, outer } = surface[k]!;
+    const r = surface[k]!;
     const box = canvas.getBoundingClientRect();
     const vw = box.width || 1;
     const vh = box.height || 1;
@@ -550,17 +549,15 @@ export function createRoom(
     const dy = (rect.y - box.top + rect.height / 2 - vh / 2) * perPixel;
     const s = Math.sin(base);
     const c = Math.cos(base);
-    // Looking at the wall: outwards for the outer wall, inwards for the inner one. Back off along that
-    // direction, then shift sideways so the print lands where the rect is.
-    const fx = outer ? s : -s;
-    const fz = outer ? c : -c;
-    const x = r * s - fx * d + fz * dx;
-    const z = r * c - fz * d - fx * dx;
+    // Looking out at the wall (along s, c): back off along that direction, then shift sideways so the print
+    // lands where the rect is.
+    const x = r * s - s * d + c * dx;
+    const z = r * c - c * d - s * dx;
     return {
       angle: nearestEquivalent(Math.atan2(x, z), base),
       radius: Math.hypot(x, z),
       y: ROOM.photoY + dy,
-      heading: nearestEquivalent(outer ? base + Math.PI : base, from.heading),
+      heading: nearestEquivalent(base + Math.PI, from.heading),
       pitch: 0,
     };
   };
@@ -817,6 +814,7 @@ export function createRoom(
     portrait = camera.aspect < 0.8;
     camera.fov = portrait ? 62 : 56;
     camera.updateProjectionMatrix();
+    yaw = walkYaw(plan, Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
     if (mode === 'focus' && focusK !== null) target = focusPoseFor(focusK, target);
     if (mode === 'intro') target = introPose();
     dirty = true;
@@ -927,7 +925,7 @@ export function createRoom(
     for (let k = 0; k < prints; k++) {
       const offset = towards(k, view);
       if (offset < -0.6 || offset > 1.4) continue;
-      const r = plan.slots[k]!.wall === 'outer' ? RO : RI;
+      const r = RO;
       const angle = view + offset;
       probe.set(r * Math.sin(angle), ROOM.photoY, r * Math.cos(angle));
       toProbe.subVectors(probe, camera.position);
@@ -1207,10 +1205,103 @@ function wallTexture(aspect: number): CanvasTexture {
   return texture;
 }
 
+/** Metres of inner wall one stretch of its drawing covers; the stretch repeats a whole number of times round. */
+const DRAWING_LENGTH = 9;
+
 /**
- * One bay of half the floor, pale oak boards running along the corridor: darker where it meets its wall, with
- * the spill of light under that wall's print. The canvas's top row is the outer edge of its strip (v = 1), so
- * the outer half has its wall at the top and the inner half at the bottom.
+ * One stretch of the inner wall: the outer wall's plaster and falloff, without the spots' pools, and a fine
+ * pencil drawing on it. Thirty-odd graphite lines run along the wall, parting and swelling gently in the
+ * middle like contour lines, with a hand's slight wobble and changing pressure. Every wave fits a whole number
+ * of times across, so the stretch joins seamlessly round the ring; the lines are pale and thin, so they stay
+ * behind the prints. `aspect` is the stretch's width / height.
+ */
+function drawingTexture(aspect: number, anisotropy: number): CanvasTexture {
+  const height = 1024;
+  const width = Math.round(Math.min(4096, height * aspect));
+  const unit = height / ROOM.wallHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = COLORS.wall;
+  ctx.fillRect(0, 0, width, height);
+  let g = ctx.createLinearGradient(0, 0, 0, height * 0.3);
+  g.addColorStop(0, `rgba(${COLORS.shade},0.12)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  g = ctx.createLinearGradient(0, height * 0.62, 0, height);
+  g.addColorStop(0, `rgba(${COLORS.shade},0)`);
+  g.addColorStop(1, `rgba(${COLORS.shade},0.16)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+
+  const random = seeded(23);
+  const TAU = Math.PI * 2;
+  /** Height offsets in metres: a slow swell, two smaller ones, and a hand's wobble. */
+  const waves = [
+    { cycles: 1, amplitude: 0.3 },
+    { cycles: 2, amplitude: 0.12 },
+    { cycles: 3, amplitude: 0.06 },
+  ].map((w) => ({ ...w, phase: random() * TAU, drift: (random() - 0.5) * 1.2 }));
+  const wobble = [
+    { cycles: 9, amplitude: 0.004, phase: random() * TAU },
+    { cycles: 14, amplitude: 0.002, phase: random() * TAU },
+  ];
+  const LINES = 32;
+  const bottom = 0.7;
+  const top = 3.8;
+  const yAt = (x: number, t: number) => {
+    const u = x / width;
+    // Lines swell most in the middle of the band and lie nearly flat at its edges, so they never cross.
+    const swell = Math.sin(Math.PI * t) ** 1.5;
+    let metres = bottom + t * (top - bottom);
+    for (const w of waves) metres += w.amplitude * swell * Math.sin(w.cycles * TAU * u + w.phase + w.drift * t);
+    for (const w of wobble) metres += w.amplitude * Math.sin(w.cycles * TAU * u + w.phase + t * 9);
+    return height - metres * unit;
+  };
+  // Butt ends, so the short runs (each at its own pressure) meet without darker overlaps.
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
+  const STEP = 4;
+  const RUN = 32;
+  for (let i = 0; i < LINES; i++) {
+    const t = i / (LINES - 1);
+    // Fainter towards the top and bottom of the band, as if drawn more lightly there; along the line the
+    // pressure rises and falls slowly (whole cycles, so it joins round the ring too).
+    const weight = 0.55 + 0.45 * Math.sin(Math.PI * t);
+    const [p1, p2] = [random() * TAU, random() * TAU];
+    for (let x0 = 0; x0 < width; x0 += RUN) {
+      const u = (x0 + RUN / 2) / width;
+      const pressure = weight * (0.8 + 0.25 * Math.sin(5 * TAU * u + p1) * Math.sin(3 * TAU * u + p2));
+      ctx.beginPath();
+      for (let x = x0; x <= Math.min(width, x0 + RUN); x += STEP) {
+        if (x === x0) ctx.moveTo(x, yAt(x, t));
+        else ctx.lineTo(x, yAt(x, t));
+      }
+      ctx.strokeStyle = `rgba(58,54,50,${(0.3 * pressure).toFixed(3)})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(58,54,50,${(0.18 * pressure).toFixed(3)})`;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  }
+
+  // Shadow gap where the wall meets the floor.
+  ctx.fillStyle = `rgba(${COLORS.shade},0.55)`;
+  ctx.fillRect(0, height - 0.035 * unit, width, 0.035 * unit);
+
+  const texture = canvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.anisotropy = anisotropy;
+  return texture;
+}
+
+/**
+ * One bay of half the floor, pale oak boards running along the corridor: darker where it meets its wall, and
+ * on the outer half the spill of light under the print. The canvas's top row is the outer edge of its strip
+ * (v = 1), so the outer half has its wall at the top and the inner half at the bottom.
  */
 function floorTexture(edge: Wall): CanvasTexture {
   const width = 512;
@@ -1242,10 +1333,12 @@ function floorTexture(edge: Wall): CanvasTexture {
   g.addColorStop(1, `rgba(${COLORS.shade},0)`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
-  glow(ctx, width / 2, wallY, width * 0.45, height * 0.6, [
-    [0, `rgba(${COLORS.light},0.5)`],
-    [1, `rgba(${COLORS.light},0)`],
-  ]);
+  if (edge === 'outer') {
+    glow(ctx, width / 2, wallY, width * 0.45, height * 0.6, [
+      [0, `rgba(${COLORS.light},0.5)`],
+      [1, `rgba(${COLORS.light},0)`],
+    ]);
+  }
   const texture = canvasTexture(canvas);
   texture.wrapS = RepeatWrapping;
   return texture;

@@ -1,7 +1,7 @@
 /**
- * Pure geometry for the walk-through: a ring-shaped corridor with framed prints on both walls, evenly spaced
- * along each, and the title on the outer wall, which the visitor can walk round forever. No DOM or three.js
- * imports, so it runs in unit tests. World units are roughly metres.
+ * Pure geometry for the walk-through: a ring-shaped corridor with framed prints evenly spaced along its outer
+ * wall, the title among them, which the visitor can walk round forever. The inner wall carries a pencil
+ * drawing and no prints. No DOM or three.js imports, so it runs in unit tests. World units are roughly metres.
  *
  * Angles follow three.js's CylinderGeometry: a point at angle θ and radius r is (r·sinθ, y, r·cosθ).
  * Walking forward increases the angle; the inner wall is then on the visitor's left.
@@ -15,19 +15,21 @@ export const ROOM = {
   wallHeight: 4.6,
   /**
    * The room's natural size: its inner wall's radius, a gentle curve with the visitor walking well clear of
-   * it. A collection too small to fill it repeats round the walls, as an exhibition hang does; a large one
+   * it. A collection too small to fill it repeats round the wall, as an exhibition hang does; a large one
    * grows the room.
    */
   innerRadius: 12.2,
   /** A collection that nearly fills the natural room shrinks it a little, never below this. */
   minInnerRadius: 8,
-  /** Centre to centre along either wall: the widest frame and a generous gap. Both walls keep it. */
+  /** Centre to centre along the outer wall: the widest frame and a generous gap. */
   spacing: 3.9,
   /** Height of a print's centre, and of the visitor's eyes while walking. */
   photoY: 1.92,
   eyeY: 1.72,
   /** Where along the corridor the visitor walks: 0 is the inner wall, 1 the outer. */
   walkLane: 0.58,
+  /** How much of the view's width the inner wall takes while walking, at eye level: a sliver at the left. */
+  innerShare: 0.08,
   /** White mat around each print, with a little extra at the bottom as framers do. */
   mat: 0.16,
   matBottom: 0.04,
@@ -35,7 +37,6 @@ export const ROOM = {
 
 export interface Slot {
   photoIndex: number;
-  wall: Wall;
   angle: number;
 }
 
@@ -43,23 +44,21 @@ export interface RoomPlan {
   innerRadius: number;
   outerRadius: number;
   walkRadius: number;
-  /** Bays round each whole wall, evenly spaced; the outer wall's bay 0 is the title. */
-  outerBays: number;
-  innerBays: number;
+  /** Bays round the outer wall, evenly spaced; bay 0 is the title. */
+  bays: number;
   /** How many times each photo hangs round the room: more than once only in a small collection. */
   repeats: number;
-  /** Average angle between neighbouring prints (either wall), for measuring distances in prints. */
+  /** Angle between neighbouring bays, for measuring distances in prints. */
   unit: number;
-  /** On the outer wall: the exhibition title, where the visitor arrives and each lap begins. */
+  /** The exhibition title, where the visitor arrives and each lap begins. */
   titleAngle: number;
   /** Every print round the room, by angle: the photos in order, again and again for a small collection. */
   slots: Slot[];
 }
 
 /**
- * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them). The title takes the
- * outer wall's bay 0; prints fill the rest in order of angle, so walking forward passes the photos in order,
- * on whichever wall comes next.
+ * Bays every `ROOM.spacing` along the outer wall. The title takes bay 0; prints fill the rest in order, so
+ * walking forward passes the photos in order.
  *
  * The room keeps close to its natural size. A collection that would leave it more than half empty repeats,
  * in whole runs, as many times as fills it best, and the room is sized to fit them exactly; a larger one
@@ -68,33 +67,38 @@ export interface RoomPlan {
 export function planRoom(count: number): RoomPlan {
   const photos = Math.max(0, count);
   const turn = Math.PI * 2;
-  const bays = (r: number) => Math.floor((turn * r) / ROOM.spacing);
+  /** Bays round the outer wall of a room of inner radius r. */
+  const bays = (r: number) => Math.floor((turn * (r + ROOM.corridor)) / ROOM.spacing);
   /** Prints a room of inner radius r holds, the title's bay aside. */
-  const capacity = (r: number) => bays(r) + bays(r + ROOM.corridor) - 1;
+  const capacity = (r: number) => bays(r) - 1;
   const natural = capacity(ROOM.innerRadius);
   const repeats = photos > 0 && photos < natural ? Math.max(1, Math.round(natural / photos)) : 1;
   const prints = photos * repeats;
   let innerRadius: number = photos >= natural ? ROOM.innerRadius : ROOM.minInnerRadius;
   if (photos === 0) innerRadius = ROOM.innerRadius;
   while (capacity(innerRadius) < prints) innerRadius += 0.05;
-  const outerRadius = innerRadius + ROOM.corridor;
-  const outerBays = bays(outerRadius);
-  const innerBays = bays(innerRadius);
-  const positions = [
-    ...Array.from({ length: outerBays - 1 }, (_, j) => ({ wall: 'outer' as Wall, angle: ((j + 1) * turn) / outerBays })),
-    ...Array.from({ length: innerBays }, (_, j) => ({ wall: 'inner' as Wall, angle: ((j + 0.5) * turn) / innerBays })),
-  ].sort((x, y) => x.angle - y.angle);
+  const n = bays(innerRadius);
   return {
     innerRadius,
-    outerRadius,
+    outerRadius: innerRadius + ROOM.corridor,
     walkRadius: innerRadius + ROOM.corridor * ROOM.walkLane,
-    outerBays,
-    innerBays,
+    bays: n,
     repeats,
-    unit: turn / (outerBays + innerBays),
+    unit: turn / n,
     titleAngle: 0,
-    slots: positions.slice(0, prints).map((p, i) => ({ photoIndex: i % Math.max(1, photos), ...p })),
+    slots: Array.from({ length: prints }, (_, i) => ({ photoIndex: i % Math.max(1, photos), angle: ((i + 1) * turn) / n })),
   };
+}
+
+/**
+ * How far the walking view turns from the direction of travel towards the inner wall, so the inner wall takes
+ * `share` of the view's width at eye level and the outer wall, with the prints, the rest. Lines of sight more
+ * than `acos(inner radius / walk radius)` left of the way ahead meet the inner wall. `tanHalfWidth` is the
+ * tangent of half the horizontal field of view, so a narrow portrait screen turns further than a wide one.
+ */
+export function walkYaw(plan: Pick<RoomPlan, 'innerRadius' | 'walkRadius'>, tanHalfWidth: number, share: number = ROOM.innerShare): number {
+  const tangent = Math.acos(plan.innerRadius / plan.walkRadius);
+  return tangent - Math.atan((1 - 2 * share) * tanHalfWidth);
 }
 
 /** How far ahead of the visitor, as an angle, the print they are walking up to hangs. */
