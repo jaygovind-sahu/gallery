@@ -108,6 +108,48 @@ export function wrapAngle(angle: number): number {
   return ((angle % turn) + turn) % turn;
 }
 
+/** An angle folded into [-π, π): a turn, the short way round. */
+export function wrapSigned(angle: number): number {
+  return wrapAngle(angle + Math.PI) - Math.PI;
+}
+
+/** The camera heading (three.js `rotation.y`) that looks from the point at `angle` and `radius` towards (x, z). */
+export function headingTowards(angle: number, radius: number, x: number, z: number): number {
+  return Math.atan2(-(x - radius * Math.sin(angle)), -(z - radius * Math.cos(angle)));
+}
+
+/**
+ * The print a visitor who has stopped walking at `angle` turns to look at: the one hanging nearest the point
+ * they were walking up to (`aheadAngle`), on either wall. Null when no print hangs near it, as at the title.
+ */
+export function lookSlot(plan: Pick<RoomPlan, 'slots' | 'walkRadius' | 'unit'>, angle: number): number | null {
+  const view = angle + aheadAngle(plan);
+  let best: number | null = null;
+  let bestOffset = plan.unit;
+  for (let k = 0; k < plan.slots.length; k++) {
+    const offset = Math.abs(nearestEquivalent(plan.slots[k]!.angle, view) - view);
+    if (offset < bestOffset) {
+      bestOffset = offset;
+      best = k;
+    }
+  }
+  return best;
+}
+
+/**
+ * One frame of a critically damped spring from `value`, moving at `velocity`, towards `target`: it eases in
+ * and out without overshooting, settles in about 2.4 × `smoothTime` seconds, and keeps the same pace at any
+ * frame rate. Returns the new value and velocity.
+ */
+export function smoothDamp(value: number, velocity: number, target: number, smoothTime: number, dt: number): [number, number] {
+  const omega = 2 / Math.max(1e-4, smoothTime);
+  const x = omega * dt;
+  const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = value - target;
+  const step = (velocity + omega * change) * dt;
+  return [target + (change + step) * decay, (velocity - omega * step) * decay];
+}
+
 /** A print's size on the wall: tall photos 1.7 high, wide ones 2.2 wide, panoramas up to 3. */
 export function photoSize(width: number, height: number): { w: number; h: number } {
   const aspect = width > 0 && height > 0 ? width / height : 1.5;
