@@ -21,8 +21,6 @@ import {
   Group,
   InstancedMesh,
   LinearFilter,
-  LineBasicMaterial,
-  LineSegments,
   Mesh,
   MeshBasicMaterial,
   Object3D,
@@ -84,8 +82,6 @@ const COLORS = {
   slot: 0xe5e1da,
   slotWall: 0xe0dbd3,
   slotCorridor: 0xd3cdc4,
-  /** The steel cables from the picture rail down to each frame. */
-  cable: 0x9a958d,
   lens: 0xfffefb,
   trim: 0xd9d4cc,
   mat: 0xf5f3ef,
@@ -109,8 +105,8 @@ const FINISHES = {
 type Finish = keyof typeof FINISHES;
 
 /**
- * Painted joinery round every wall, lit from above like the mouldings: a picture rail near the ceiling, which
- * the cables hang from, and a skirting at the floor. Heights are of the bottom and top edges; depth is how far
+ * Painted joinery round every wall, lit from above like the mouldings: a picture rail near the ceiling and a
+ * skirting at the floor. Heights are of the bottom and top edges; depth is how far
  * each stands out from the wall.
  */
 const JOINERY = {
@@ -529,9 +525,6 @@ export function createRoom(
   /** Per print (slot): the middle of its surface and the way it faces, for standing in front of it. */
   const surface: Mount[] = [];
   const barDummy = new Object3D();
-  /** Cable ends, top and bottom, two cables per print, in world space for one set of lines. */
-  const cable: number[] = [];
-  const cableEnd = new Vector3();
   plan.slots.forEach((slot, n) => {
     const k = slot.photoIndex;
     const { w, h, outerW, outerH, centreY } = sizes[k]!;
@@ -578,18 +571,7 @@ export function createRoom(
     }
     group.remove(barDummy);
     hangLight(n, mount, slot.wall);
-
-    // Two cables from the picture rail, a little in from each side, to hooks behind the top of the frame.
-    // They run a couple of centimetres off the wall, which on the concave outer wall comes closer at the sides.
-    for (const side of [-1, 1]) {
-      const x = side * outerW * 0.36;
-      const z = -standoff + (facets[n] ? 0 : (x * x) / (2 * RO)) + 0.018;
-      for (const y of [JOINERY.rail.y0, frameY + outerH / 2 - 0.03]) cable.push(...cableEnd.set(x, y, z).applyMatrix4(group.matrixWorld).toArray());
-    }
   });
-  const cableGeometry = keep(new BufferGeometry());
-  cableGeometry.setAttribute('position', new Float32BufferAttribute(cable, 3));
-  scene.add(new LineSegments(cableGeometry, keep(new LineBasicMaterial({ color: COLORS.cable }))));
   const box = keep(new BoxGeometry(1, 1, 1));
   const instanced: InstancedMesh[] = [];
   for (const [finish, matrices] of pieces) {
