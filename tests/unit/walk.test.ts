@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aheadAngle, focusDistance, framedSize, headingTowards, lightboxRect, lookSlot, nearestEquivalent, photoSize, planRoom, ROOM, smoothDamp, wrapAngle, wrapSigned } from '../../src/lib/walk';
+import { aheadAngle, focusDistance, framedSize, lightboxRect, nearestEquivalent, photoSize, planRoom, ROOM, wrapAngle } from '../../src/lib/walk';
 
 const TURN = Math.PI * 2;
 
@@ -79,65 +79,6 @@ describe('wrapAngle and nearestEquivalent', () => {
     expect(nearestEquivalent(0.1, 3 * TURN + 0.2)).toBeCloseTo(3 * TURN + 0.1);
     expect(nearestEquivalent(0.1, -TURN)).toBeCloseTo(-TURN + 0.1);
     expect(nearestEquivalent(TURN - 0.1, 0)).toBeCloseTo(-0.1);
-  });
-
-  it('folds a turn into half a turn either way', () => {
-    expect(wrapSigned(0.5)).toBeCloseTo(0.5);
-    expect(wrapSigned(-0.5)).toBeCloseTo(-0.5);
-    expect(wrapSigned(TURN - 0.5)).toBeCloseTo(-0.5);
-    expect(wrapSigned(-TURN + 0.5)).toBeCloseTo(0.5);
-    expect(wrapSigned(3 * TURN + 1)).toBeCloseTo(1);
-  });
-});
-
-describe('looking round', () => {
-  it('heads along the corridor when looking at a point straight ahead', () => {
-    const angle = 0.7;
-    const radius = 15;
-    const [x, z] = [radius * Math.sin(angle), radius * Math.cos(angle)];
-    // Straight ahead is along the tangent, where walking forward increases the angle.
-    const heading = headingTowards(angle, radius, x + Math.cos(angle), z - Math.sin(angle));
-    expect(wrapSigned(heading - (angle - Math.PI / 2))).toBeCloseTo(0);
-    // The inner wall's side is a quarter turn to the left.
-    expect(wrapSigned(headingTowards(angle, radius, 0, 0) - heading)).toBeCloseTo(Math.PI / 2);
-  });
-
-  it('turns to the print nearest the point walked up to, on either wall', () => {
-    const plan = planRoom(13);
-    const walls = new Set<string>();
-    for (let i = 0; i < 200; i++) {
-      const angle = 0.3 + (i / 200) * (TURN - 0.6);
-      const k = lookSlot(plan, angle);
-      expect(k).not.toBeNull();
-      const view = angle + aheadAngle(plan);
-      const offset = Math.abs(nearestEquivalent(plan.slots[k!]!.angle, view) - view);
-      for (const slot of plan.slots) expect(offset).toBeLessThanOrEqual(Math.abs(nearestEquivalent(slot.angle, view) - view) + 1e-9);
-      walls.add(plan.slots[k!]!.wall);
-    }
-    expect([...walls].sort()).toEqual(['inner', 'outer']);
-  });
-
-  it('turns to no print where none hangs near, or in an empty room', () => {
-    expect(lookSlot(planRoom(0), 1)).toBeNull();
-    const plan = planRoom(13);
-    // Walking up to the title wall, at angle 0.
-    expect(lookSlot(plan, -aheadAngle(plan))).toBeNull();
-  });
-
-  it('eases to the target without overshooting, at the same pace at any frame rate', () => {
-    const run = (fps: number, seconds: number) => {
-      let [value, velocity] = [0, 0];
-      let peak = 0;
-      for (let i = 0; i < fps * seconds; i++) {
-        [value, velocity] = smoothDamp(value, velocity, 1, 0.4, 1 / fps);
-        peak = Math.max(peak, value);
-      }
-      return { value, peak };
-    };
-    expect(run(60, 0.1).value).toBeLessThan(0.15);
-    expect(run(60, 1).value).toBeGreaterThan(0.95);
-    expect(run(60, 3).peak).toBeLessThanOrEqual(1);
-    expect(Math.abs(run(30, 0.5).value - run(120, 0.5).value)).toBeLessThan(0.02);
   });
 });
 

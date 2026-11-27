@@ -84,7 +84,6 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - From about 47 photos each hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
   - Prints are **slots** (`plan.slots`, each with its `photoIndex`). The room works in slots: picking, focus, stepping, the map. Textures, labels and the lightbox work in photos. Stepping into a photo, or back out of it, uses the print the visitor stands at, else the nearest print of that photo.
   - `lightboxRect` is where the lightbox will draw a photo (its padding, the 340 px info panel, real-size cap).
-  - `lookSlot` is the print a visitor who stops turns to, and `smoothDamp` the spring that turns them (Input → Looking round, below).
 - **Room:** [walk/room.ts](../src/components/gallery/walk/room.ts) builds walls, floor and ceiling as rings sampled round the angle. Their texture u counts bays, so each bay's light pool lines up with its print.
   - Every architectural mesh also blocks clicks, so prints hidden behind the inner wall can't be picked.
 - **Look:** warm off-white plaster, a plain white ceiling with a recessed light over each bay, and pale oak boards running round the corridor.
@@ -103,16 +102,11 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - A hint at the bottom until the visitor first moves, and the caption with its buttons while standing at a print.
 - **Input:**
   - The wheel and a drag walk with exponential damping, round and round. Moves longer than `WALK.jump` (map jumps, Home) dip the view out and back in instead of spinning the camera.
-  - While walking, the view looks along the corridor, turned a little towards the inner wall. The inner wall is convex, so its prints only face the visitor once they're beside them, outside that view (on a portrait phone the view is only 30–40° wide).
-  - **Looking round:** `WALK.rest` ms after the last wheel, drag, key or map move, with under `WALK.settle` metres left to glide, the visitor turns to face the print nearest where they'll stop (`lookSlot`: the print nearest `aheadAngle` ahead, on either wall). A spring (`smoothDamp`) eases the turn in and out, and turns back to the corridor as soon as they walk on.
-    - The turn is an offset on the walking heading (`look`), so walking, the map and stepping are unchanged.
-    - Only walking starts it: going back to walking from a print (Back to walking, Escape) doesn't turn straight back to that print.
-    - Nothing to turn to near the title wall, or under `prefers-reduced-motion`.
   - Keys: right, down and Page Down walk on, or move to the next print when standing at one; left, up and Page Up go back. Home returns to the title wall. Enter steps closer, then in; Escape steps back.
   - **Step into the photo:** View photo, Enter or a second click moves the camera square on to the print, on either wall, until it fills `lightboxRect`. The island preloads that file, then opens the lightbox, whose 250 ms fade makes the room go dark around the print.
   - While the lightbox is open, each slide change puts the camera inside that print (`standIn`), drawn once behind the lightbox. Closing (the lightbox calls `close` after its fade-out) reveals the print where the lightbox had it, then steps back out to stand in front of it. Reduced motion opens the lightbox directly.
 - **Textures:** existing sizes only, so there are no new transformations. Each photo starts as its ThumbHash, then the 480. Prints within a couple of bays of the view get the 1080, and the focused one the 1600; sharper copies are dropped when the visitor walks away.
-- **Fallbacks:** without WebGL, or with no photos, the island shows a line and a link to the grid. `prefers-reduced-motion` cuts the glides and fades, shortens the damping, and turns off looking round.
+- **Fallbacks:** without WebGL, or with no photos, the island shows a line and a link to the grid. `prefers-reduced-motion` cuts the glides and fades and shortens the damping.
 
 ## Download deterrents
 
