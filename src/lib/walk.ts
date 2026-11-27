@@ -25,7 +25,7 @@ export const ROOM = {
   /** Centre to centre along either wall: the widest frame and a generous gap. Both walls keep it. */
   spacing: 3.9,
   /** Height of a print's centre, and of the visitor's eyes while walking. */
-  photoY: 1.92,
+  photoY: 2.1,
   eyeY: 1.72,
   /** Where along the corridor the visitor walks: 0 is the inner wall, 1 the outer. */
   walkLane: 0.58,
