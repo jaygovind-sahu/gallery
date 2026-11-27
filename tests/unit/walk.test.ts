@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   aheadAngle,
+  cornerOffsets,
   facet,
   FOCUS_FILL,
   focusDistance,
   fovToFit,
   framedSize,
+  innerOutline,
   innerSurface,
   lightboxRect,
+  lightSlots,
   nearestEquivalent,
   outerMount,
   photoSize,
   planRoom,
   ROOM,
+  underSlot,
   walkYaw,
   wrapAngle,
 } from '../../src/lib/walk';
@@ -153,6 +157,95 @@ describe('innerSurface', () => {
     expect(innerSurface(12.2, [f], 1)).toBeCloseTo(Math.hypot(f.mount.x, f.mount.z));
     expect(innerSurface(12.2, [f], Math.atan2(f.tip.x, f.tip.z) - 1e-6)).toBeCloseTo(f.reach, 3);
     expect(innerSurface(12.2, [f], Math.atan2(f.start.x, f.start.z) + 1e-6)).toBeCloseTo(12.2, 3);
+  });
+});
+
+describe('innerOutline and cornerOffsets', () => {
+  const radius = (p: { x: number; z: number }) => Math.hypot(p.x, p.z);
+  const roomWithFacets = (count: number) => {
+    const plan = planRoom(count);
+    const facets = plan.slots.filter((s) => s.wall === 'inner').map((s) => facet(plan.innerRadius, s.angle, ROOM.facetLength));
+    return { plan, facets };
+  };
+
+  it('is the plain curve when no stretch stands out from it', () => {
+    const outline = innerOutline(12.2, [], 100);
+    expect(outline).toHaveLength(100);
+    for (const p of outline) expect(radius(p)).toBeCloseTo(12.2);
+  });
+
+  it('runs along the curve and out round every angled stretch, in order of angle', () => {
+    const { plan, facets } = roomWithFacets(13);
+    const segments = 200;
+    const outline = innerOutline(plan.innerRadius, facets, segments);
+    for (const f of facets) {
+      const i = outline.indexOf(f.start);
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(outline[i + 1]).toBe(f.tip);
+      expect(outline[i + 2]).toBe(f.foot);
+    }
+    const corners = new Set(facets.flatMap((f) => [f.tip]));
+    let angle = -Infinity;
+    let unwound = 0;
+    outline.forEach((p, i) => {
+      if (!corners.has(p)) expect(radius(p)).toBeCloseTo(plan.innerRadius);
+      let a = Math.atan2(p.x, p.z) + unwound;
+      if (a < angle - 1) {
+        unwound += TURN;
+        a += TURN;
+      }
+      expect(a).toBeGreaterThanOrEqual(angle - 1e-9);
+      if (i > 0 && !corners.has(p) && !corners.has(outline[i - 1]!)) expect(a - angle).toBeLessThanOrEqual(TURN / segments + 1e-9);
+      angle = a;
+    });
+    expect(unwound).toBe(TURN);
+  });
+
+  it('moves every run of a wall exactly one unit into the corridor', () => {
+    const { plan, facets } = roomWithFacets(13);
+    const outline = innerOutline(plan.innerRadius, facets, 200);
+    const offsets = cornerOffsets(outline, 1);
+    outline.forEach((a, i) => {
+      const b = outline[(i + 1) % outline.length]!;
+      const length = Math.hypot(b.x - a.x, b.z - a.z);
+      // Signed distance of both moved ends from the run's own line, on the corridor side.
+      for (const [p, o] of [[a, offsets[i]!], [b, offsets[(i + 1) % outline.length]!]] as const) {
+        const side = ((a.z - b.z) * (p.x + o.x - a.x) + (b.x - a.x) * (p.z + o.z - a.z)) / length;
+        expect(side).toBeCloseTo(1);
+      }
+    });
+    // On the outer wall the corridor is towards the centre.
+    const ring = Array.from({ length: 90 }, (_, i) => ({ x: 18 * Math.sin((TURN * i) / 90), z: 18 * Math.cos((TURN * i) / 90) }));
+    cornerOffsets(ring, -1).forEach((o, i) => expect(radius({ x: ring[i]!.x + o.x, z: ring[i]!.z + o.z })).toBeLessThan(18 - 0.99));
+  });
+});
+
+describe('lightSlots and underSlot', () => {
+  it('runs one slot in from the outer wall and one clear of the angled stretches, either side of the walk', () => {
+    for (const count of [13, 60]) {
+      const plan = planRoom(count);
+      const facets = plan.slots.filter((s) => s.wall === 'inner').map((s) => facet(plan.innerRadius, s.angle, 4));
+      const slots = lightSlots(plan.innerRadius, plan.outerRadius, facets);
+      expect(slots.outer).toBeCloseTo(plan.outerRadius - ROOM.slotFromOuter);
+      expect(slots.inner).toBeGreaterThanOrEqual(plan.innerRadius + ROOM.slotFromInner);
+      for (const f of facets) expect(slots.inner - f.reach).toBeGreaterThanOrEqual(0.3 - 1e-9);
+      expect(slots.inner).toBeLessThan(plan.walkRadius);
+      expect(slots.outer).toBeGreaterThan(plan.walkRadius);
+    }
+  });
+
+  it('puts each light square on to its print, under its wall\'s slot', () => {
+    const outer = outerMount(18, 0.4);
+    const spot = underSlot(outer, 18 - ROOM.slotFromOuter);
+    expect(Math.hypot(spot.x - outer.x, spot.z - outer.z)).toBeCloseTo(ROOM.slotFromOuter);
+    expect(Math.atan2(spot.x, spot.z)).toBeCloseTo(0.4);
+    const f = facet(12.2, 1, ROOM.facetLength);
+    const inner = underSlot(f.mount, 14);
+    expect(Math.hypot(inner.x, inner.z)).toBeCloseTo(14);
+    const dx = inner.x - f.mount.x;
+    const dz = inner.z - f.mount.z;
+    expect(dx * f.mount.nz - dz * f.mount.nx).toBeCloseTo(0);
+    expect(dx * f.mount.nx + dz * f.mount.nz).toBeGreaterThan(0);
   });
 });
 

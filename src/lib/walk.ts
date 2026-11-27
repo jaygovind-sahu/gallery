@@ -13,7 +13,7 @@ export type Wall = 'outer' | 'inner';
 export const ROOM = {
   /** Distance between the inner and outer walls. */
   corridor: 6,
-  wallHeight: 4.6,
+  wallHeight: 5.4,
   /**
    * The room's natural size: its inner wall's radius, a gentle curve with the visitor walking well clear of
    * it. A collection too small to fill it repeats round the walls, as an exhibition hang does; a large one
@@ -35,6 +35,12 @@ export const ROOM = {
    */
   facetTurn: 0.44,
   facetLength: 3.2,
+  /**
+   * The ceiling's two light slots, one over each wall, run all the way round: the outer one this far in from
+   * the outer wall, the inner one this far out from the inner curve, and clear of the angled stretches' tips.
+   */
+  slotFromOuter: 1.1,
+  slotFromInner: 1.75,
   /** White mat around each print, with a little extra at the bottom as framers do. */
   mat: 0.16,
   matBottom: 0.04,
@@ -178,6 +184,72 @@ export function innerSurface(innerRadius: number, facets: readonly Facet[], angl
     if (t > 0 && along >= 0 && along <= 1) surface = Math.max(surface, t);
   }
   return surface;
+}
+
+/**
+ * The inner wall seen from above, as a closed outline in order of angle: the curve, and out round each angled
+ * stretch where one stands (its start, tip and foot). Arcs of the curve are cut into pieces at most a
+ * `segments`th of a turn. The picture rail and the skirting follow it. `facets` must be in order of angle
+ * and not overlap, as the room's are.
+ */
+export function innerOutline(innerRadius: number, facets: readonly Facet[], segments: number): Point[] {
+  const turn = Math.PI * 2;
+  const step = turn / segments;
+  const at = (angle: number): Point => ({ x: innerRadius * Math.sin(angle), z: innerRadius * Math.cos(angle) });
+  const angleOf = (p: Point) => Math.atan2(p.x, p.z);
+  /** The curve strictly between two angles, `to` after `from`. */
+  const arc = (from: number, to: number): Point[] => {
+    const pieces = Math.max(1, Math.ceil((to - from) / step));
+    return Array.from({ length: pieces - 1 }, (_, j) => at(from + ((to - from) * (j + 1)) / pieces));
+  };
+  if (facets.length === 0) return Array.from({ length: segments }, (_, i) => at(i * step));
+  const outline: Point[] = [];
+  let foot = angleOf(facets[facets.length - 1]!.foot);
+  for (const f of facets) {
+    const start = foot + wrapAngle(angleOf(f.start) - foot);
+    outline.push(...arc(foot, start), f.start, f.tip, f.foot);
+    foot = start + wrapAngle(angleOf(f.foot) - start);
+  }
+  return outline;
+}
+
+/**
+ * For a closed wall outline seen from above, in order of angle: how far, and which way, to move each corner so
+ * that every straight run of it moves one unit into the corridor. `towards` is 1 where the corridor is away
+ * from the centre (the inner wall) and -1 where it is towards it (the outer). Mouldings along a wall are its
+ * outline moved out by their depth.
+ */
+export function cornerOffsets(outline: readonly Point[], towards: 1 | -1): Point[] {
+  const n = outline.length;
+  /** The unit normal into the corridor of the run from corner i to the next. */
+  const normal = (i: number): Point => {
+    const a = outline[i % n]!;
+    const b = outline[(i + 1) % n]!;
+    const length = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: (towards * (a.z - b.z)) / length, z: (towards * (b.x - a.x)) / length };
+  };
+  return outline.map((_, i) => {
+    const before = normal(i + n - 1);
+    const after = normal(i);
+    // Along the bisector, 1 / cos(half the turn) long, so both runs move exactly one unit.
+    const scale = 1 / Math.max(0.1, 1 + before.x * after.x + before.z * after.z);
+    return { x: (before.x + after.x) * scale, z: (before.z + after.z) * scale };
+  });
+}
+
+/** The radii of the ceiling's two light slots: in from the outer wall, and out past the angled stretches' tips. */
+export function lightSlots(innerRadius: number, outerRadius: number, facets: readonly Facet[]): { inner: number; outer: number } {
+  const tips = facets.reduce((far, f) => Math.max(far, f.reach), innerRadius);
+  return { inner: Math.max(innerRadius + ROOM.slotFromInner, tips + 0.3), outer: outerRadius - ROOM.slotFromOuter };
+}
+
+/** Where the line out from a print, along its wall's normal, passes under the light slot of this radius. */
+export function underSlot(mount: Mount, radius: number): Point {
+  // The line meets the circle twice; the light goes where it first does, out in front of the print.
+  const along = mount.x * mount.nx + mount.z * mount.nz;
+  const root = Math.sqrt(Math.max(0, along * along - (mount.x ** 2 + mount.z ** 2) + radius ** 2));
+  const s = -along - root > 0 ? -along - root : -along + root;
+  return { x: mount.x + mount.nx * s, z: mount.z + mount.nz * s };
 }
 
 /**
