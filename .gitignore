@@ -30,3 +30,4 @@ playwright-report/
 
 # generated test images (tests/fixtures/make-fixtures.mjs)
 tests/fixtures/*.jpg
+walk-screenshots/

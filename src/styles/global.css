@@ -627,8 +627,8 @@
   }
 }
 
-/* The room map: a hairline ring with the title wall marked at the top, a tick per print (outside for the
-   outer wall, inside for the inner), and a dot on a hand turned by --walk-angle (radians, clockwise). */
+/* The room map: a hairline ring, a tick per print (outside for the outer wall, inside for the inner), and a
+   dot on a hand turned by --walk-angle (radians, clockwise) from the first print at the top. */
 .walk-map__ring {
   fill: color-mix(in srgb, var(--color-bg) 70%, transparent);
   stroke: var(--color-divider);
@@ -638,10 +638,6 @@
   stroke: var(--color-ink-muted);
   stroke-width: 1;
   opacity: 0.55;
-}
-.walk-map__title {
-  stroke: var(--color-ink);
-  stroke-width: 2.5;
 }
 .walk-map__hand {
   position: absolute;

@@ -24,7 +24,6 @@ describe('planRoom', () => {
     const plan = planRoom(0);
     expect(plan.slots).toEqual([]);
     expect(plan.innerRadius).toBe(ROOM.innerRadius);
-    expect(plan.titleAngle).toBe(0);
   });
 
   it('repeats a small collection in whole runs, in order, to fill a room near its natural size', () => {
@@ -34,7 +33,7 @@ describe('planRoom', () => {
     plan.slots.forEach((slot, i) => expect(slot.photoIndex).toBe(i % 13));
     expect(plan.innerRadius).toBeGreaterThan(ROOM.innerRadius * 0.8);
     expect(plan.innerRadius).toBeLessThan(ROOM.innerRadius * 1.25);
-    expect(plan.outerBays - 1 + plan.innerBays - 52).toBeLessThan(3);
+    expect(plan.outerBays + plan.innerBays).toBe(52);
   });
 
   it('hangs a large collection once, in a room just big enough', () => {
@@ -43,7 +42,7 @@ describe('planRoom', () => {
       expect(plan.repeats).toBe(1);
       expect(plan.slots.map((s) => s.photoIndex)).toEqual([...Array(count).keys()]);
       expect(plan.innerRadius).toBeGreaterThanOrEqual(ROOM.innerRadius);
-      expect(plan.outerBays - 1 + plan.innerBays - count).toBeLessThan(3);
+      expect(plan.outerBays + plan.innerBays).toBe(count);
     }
   });
 
@@ -51,10 +50,26 @@ describe('planRoom', () => {
     for (const count of [1, 13, 30, 40, 46]) expect(planRoom(count).innerRadius).toBeGreaterThanOrEqual(ROOM.minInnerRadius);
   });
 
-  it('keeps prints in order of angle round the ring, after the title, on both walls', () => {
+  it('hangs a print in every bay, with no gap anywhere round the ring', () => {
+    for (let count = 1; count <= 150; count++) {
+      const plan = planRoom(count);
+      expect(plan.slots).toHaveLength(plan.outerBays + plan.innerBays);
+      expect(plan.slots).toHaveLength(count * plan.repeats);
+      for (const arc of [(TURN * plan.outerRadius) / plan.outerBays, (TURN * plan.innerRadius) / plan.innerBays]) {
+        expect(arc).toBeGreaterThanOrEqual(ROOM.spacing);
+        expect(arc).toBeLessThan(ROOM.spacing * 1.2);
+      }
+    }
+  });
+
+  it('hangs the first photo on the outer wall where the visitor arrives, at angle 0', () => {
+    for (const count of [1, 13, 40, 200]) expect(planRoom(count).slots[0]).toEqual({ photoIndex: 0, wall: 'outer', angle: 0 });
+  });
+
+  it('keeps prints in order of angle round the ring, on both walls', () => {
     const plan = planRoom(40);
     for (let i = 0; i < plan.slots.length; i++) {
-      expect(plan.slots[i]!.angle).toBeGreaterThan(plan.titleAngle);
+      expect(plan.slots[i]!.angle).toBeGreaterThanOrEqual(0);
       expect(plan.slots[i]!.angle).toBeLessThan(TURN);
       if (i > 0) expect(plan.slots[i]!.angle).toBeGreaterThanOrEqual(plan.slots[i - 1]!.angle);
     }

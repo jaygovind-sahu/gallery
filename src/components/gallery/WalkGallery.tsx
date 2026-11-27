@@ -7,10 +7,8 @@ import { createRoom, FRAME_STYLES, type RoomHandle } from './walk/room';
 
 interface Props {
   photos: PublicPhoto[];
-  /** The room's name, for screen readers and beside the map at the title wall (not lettered on the wall). */
+  /** The room's name, for screen readers and beside the map until the visitor walks up to a print. */
   heading: string;
-  /** The first small line under it, e.g. "Photographs by …"; the count and years follow. */
-  byline: string;
   /** The same photos as a grid page, for the WebGL fallback. */
   gridUrl: string;
 }
@@ -25,16 +23,7 @@ function Glyph({ d }: { d: string }) {
 const LEFT = 'M19 12H5M11 6l-6 6 6 6';
 const RIGHT = 'M5 12h14M13 6l6 6-6 6';
 
-/** "2024–2026", or one year, from the photos' capture dates. */
-function yearSpan(photos: PublicPhoto[]): string | null {
-  const years = photos.map((p) => Number(p.takenAt?.slice(0, 4))).filter((y) => Number.isFinite(y) && y > 0);
-  if (years.length === 0) return null;
-  const lo = Math.min(...years);
-  const hi = Math.max(...years);
-  return lo === hi ? String(lo) : `${lo}–${hi}`;
-}
-
-/** The room map: an 88 px plan of the ring, title wall at the top, walking clockwise. */
+/** The room map: an 88 px plan of the ring, the first print at the top, walking clockwise. */
 const MAP = { size: 88, centre: 44, radius: 34 };
 /** A point on the map at `r` from the centre, angle θ from the top, clockwise. */
 const onMap = (r: number, angle: number) => [MAP.centre + r * Math.sin(angle), MAP.centre - r * Math.cos(angle)] as const;
@@ -45,7 +34,7 @@ const onMap = (r: number, angle: number) => [MAP.centre + r * Math.sin(angle), M
  * the usual lightbox fades in exactly where the print was. Loaded `client:only`, so three.js never reaches
  * the Worker bundle.
  */
-export default function WalkGallery({ photos, heading, byline, gridUrl }: Props) {
+export default function WalkGallery({ photos, heading, gridUrl }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -64,8 +53,8 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
   const viewed = useRef(0);
   const reducedMotion = useRef(false);
 
-  // The map's marks: the title wall, and a tick per print, outside the circle for the outer wall and inside
-  // for the inner, so it reads as a floor plan.
+  // The map's marks: a tick per print, outside the circle for the outer wall and inside for the inner, so it
+  // reads as a floor plan.
   const marks = useMemo(
     () =>
       planRoom(photos.length).slots.map((s, i) => {
@@ -188,15 +177,12 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
     const host = hostRef.current;
     const root = rootRef.current;
     if (!host || !root || photos.length === 0) return;
-    const years = yearSpan(photos);
-    const count = `${photos.length} ${photos.length === 1 ? 'photograph' : 'photographs'}`;
     let room: RoomHandle;
     try {
       room = createRoom(
         host,
         root,
         photos,
-        { lines: [byline, years ? `${count} · ${years}` : count] },
         {
           onCurrent: setCurrent,
           onFocus: setFocused,
@@ -221,10 +207,10 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
       room.dispose();
       roomRef.current = null;
     };
-  }, [photos, heading, byline, openAt]);
+  }, [photos, openAt]);
 
   // Keys: right, down and Page Down walk on (or move to the next print); left, up and Page Up go back. Home
-  // returns to the title wall. Enter steps closer, then in; Escape steps back.
+  // returns to the first print. Enter steps closer, then in; Escape steps back.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const room = roomRef.current;
@@ -279,7 +265,6 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
   const photo = shown === null ? null : photos[shown]!;
   const label = photo ? photo.title?.trim() || photo.location?.name || `Photo ${shown! + 1}` : heading;
   const caption = photo?.caption?.trim() || null;
-  const [titleFrom, titleTo] = [onMap(MAP.radius - 8, 0), onMap(MAP.radius + 8, 0)];
 
   return (
     <div
@@ -295,7 +280,7 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
     >
       <div ref={hostRef} className="absolute inset-0" />
 
-      {/* Where you are: a plan of the ring with the title wall at the top; the dot goes round as you walk. */}
+      {/* Where you are: a plan of the ring with the first print at the top; the dot goes round as you walk. */}
       <div ref={mapRef} className="walk-map absolute right-4 top-[72px] flex items-center gap-3 sm:bottom-8 sm:right-8 sm:top-auto">
         <span className="walk-map__label eyebrow" aria-hidden="true">
           {label}
@@ -324,7 +309,6 @@ export default function WalkGallery({ photos, heading, byline, gridUrl }: Props)
             {marks.map((m) => (
               <line key={m.key} className="walk-map__tick" x1={m.from[0]} y1={m.from[1]} x2={m.to[0]} y2={m.to[1]} />
             ))}
-            <line className="walk-map__title" x1={titleFrom[0]} y1={titleFrom[1]} x2={titleTo[0]} y2={titleTo[1]} />
           </svg>
           <span className="walk-map__hand" aria-hidden="true">
             <span className="walk-map__dot" style={{ top: MAP.centre - MAP.radius }} />

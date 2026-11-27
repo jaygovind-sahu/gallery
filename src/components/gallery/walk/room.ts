@@ -1,11 +1,11 @@
 /**
  * The walk-through: a lit gallery shaped as a ring-shaped corridor that never ends. Framed, matted prints
- * hang on both walls, the exhibition title on the outer wall where each lap begins. The inner wall's prints
- * hang on short stretches of wall angled towards the visitor, so they face them as they walk up. The light is
+ * hang on both walls, all the way round. The inner wall's prints hang on short stretches of wall angled
+ * towards the visitor, so they face them as they walk up. The light is
  * painted into the textures rather than computed, so every surface is an unlit material and the prints keep
  * their exact colours. Browser only; the island loads it `client:only`.
  *
- * The visitor arrives facing the title wall, walks round (wheel, drag, keys, the map), clicks a print to
+ * The visitor arrives facing the first print, walks round (wheel, drag, keys, the map), clicks a print to
  * stand in front of it, and from there steps into it: the camera moves until the print sits exactly where
  * the lightbox will draw it, and the island fades the lightbox in over it. Closing steps back out.
  */
@@ -177,13 +177,8 @@ export interface RoomCallbacks {
   onOpen: (photoIndex: number) => void;
   /** The visitor moved for the first time (hide the hints). */
   onMove: () => void;
-  /** Where the visitor stands round the ring, 0…2π from the title wall, whenever it changes. */
+  /** Where the visitor stands round the ring, 0…2π from the first print, whenever it changes. */
   onAngle: (angle: number) => void;
-}
-
-/** The small lines lettered on the title wall: who took the photographs, how many, and when. */
-export interface RoomTitle {
-  lines: string[];
 }
 
 export interface RoomHandle {
@@ -192,7 +187,7 @@ export interface RoomHandle {
   focusPhoto: (photoIndex: number) => void;
   focusCurrent: () => void;
   unfocus: () => void;
-  /** Walk to a point round the ring (0…2π from the title wall), the short way round. */
+  /** Walk to a point round the ring (0…2π from the first print), the short way round. */
   walkTo: (angle: number) => void;
   /** Step into a print until it fills `rect` (client pixels), then call `done`. */
   stepIn: (photoIndex: number, rect: Rect, done: () => void) => void;
@@ -212,7 +207,6 @@ export function createRoom(
   host: HTMLElement,
   inputRoot: HTMLElement,
   photos: PublicPhoto[],
-  title: RoomTitle,
   cb: RoomCallbacks,
   options: { reducedMotion: boolean; frame?: FrameStyle },
 ): RoomHandle {
@@ -382,7 +376,7 @@ export function createRoom(
     return surface + margin;
   };
 
-  // ── The title wall and the framed prints ───────────────────────────────────────────────────────────────
+  // ── The framed prints ──────────────────────────────────────────────────────────────────────────────────
   // Each print: a soft shadow on the wall, the frame (four bars), the mat, a bright bevel round the opening,
   // the print itself, and a label below. Depths are a few millimetres apart so nothing fights in the depth
   // buffer at a distance.
@@ -402,9 +396,9 @@ export function createRoom(
   const pieces = new Map<Finish, Matrix4[]>();
   const disc = keep(new CircleGeometry(1, 28));
   disc.rotateX(Math.PI / 2); // face down
-  const lights = prints + 1; // one over each print and one over the title
-  const trims = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.trim })), lights);
-  const lenses = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.lens, toneMapped: false })), lights);
+  // One light over each print.
+  const trims = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.trim })), prints);
+  const lenses = new InstancedMesh(disc, keep(new MeshBasicMaterial({ color: COLORS.lens, toneMapped: false })), prints);
   scene.add(trims, lenses);
 
   const states: PhotoState[] = photos.map(() => ({
@@ -445,15 +439,6 @@ export function createRoom(
     scene.add(group);
     return group;
   };
-
-  const titleTex = keep(titleTexture(title));
-  const TITLE_W = 2.5;
-  const TITLE_H = (TITLE_W * 200) / 1600;
-  const titleMount = outerMount(RO, plan.titleAngle);
-  onMount(titleMount, concave(TITLE_W / 2)).add(
-    plane(keep(new MeshBasicMaterial({ map: titleTex, transparent: true, depthWrite: false, toneMapped: false })), TITLE_W, TITLE_H, 0, 1.8, 0.004),
-  );
-  hangLight(prints, titleMount);
 
   const pickables: Mesh[] = [];
   /** Per print (slot): the middle of its surface and the way it faces, for standing in front of it. */
@@ -540,12 +525,12 @@ export function createRoom(
   /** The heading that looks from (angle, radius) towards a point. */
   const headingTowards = (angle: number, radius: number, tx: number, tz: number) =>
     Math.atan2(-(tx - radius * Math.sin(angle)), -(tz - radius * Math.cos(angle)));
-  /** On arrival: facing the title wall, with the corridor curving away to the left. */
+  /** On arrival: facing the first print, on the outer wall at angle 0, with the corridor curving away to the left. */
   const introPose = (): Pose => {
-    const t = plan.titleAngle;
+    const t = 0;
     const angle = t - 0.12;
     const radius = Math.max(RO - (portrait ? 5.0 : 4.6), clearOfInner(angle, 0.6));
-    const look = t + (portrait ? 0.01 : 0.13);
+    const look = t + (portrait ? -0.012 : 0.13);
     return {
       angle,
       radius,
@@ -557,7 +542,7 @@ export function createRoom(
   };
 
   let mode: 'intro' | 'walk' | 'focus' | 'dive' = 'intro';
-  let a = plan.titleAngle - 0.12;
+  let a = -0.12;
   let aTarget = a;
   let focusK: number | null = null;
   let target: Pose = introPose();
@@ -691,7 +676,7 @@ export function createRoom(
     schedule();
   };
 
-  /** Back to walking, from a print or from the title wall. */
+  /** Back to walking, from a print or from the arrival view. */
   const toWalk = (angle: number) => {
     const wasFocus = mode === 'focus';
     mode = 'walk';
@@ -857,7 +842,6 @@ export function createRoom(
         material.visible = true;
         material.needsUpdate = true;
       });
-      drawTitle(titleTex, title);
       dirty = true;
     });
 
@@ -1350,29 +1334,6 @@ function fit(ctx: CanvasRenderingContext2D, text: string, max: number): string {
 
 function tracking(ctx: CanvasRenderingContext2D, value: string) {
   if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = value;
-}
-
-/** The title wall's lines, lettered straight onto the outer wall at eye level. Drawn again once the fonts load. */
-function titleTexture(title: RoomTitle): CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1600;
-  canvas.height = 200;
-  const texture = canvasTexture(canvas);
-  drawTitle(texture, title);
-  return texture;
-}
-
-function drawTitle(texture: CanvasTexture, title: RoomTitle) {
-  const canvas = texture.image as HTMLCanvasElement;
-  const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = '500 46px "Barlow", sans-serif';
-  tracking(ctx, '11px');
-  ctx.fillStyle = COLORS.meta;
-  const y = 64;
-  title.lines.forEach((line, i) => ctx.fillText(fit(ctx, line.toUpperCase(), canvas.width - 30), 16, y + i * 74));
-  texture.needsUpdate = true;
 }
 
 /**

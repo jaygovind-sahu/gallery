@@ -79,9 +79,10 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - `immersive` also makes `<html>` full height. Otherwise the lightbox's no-scroll rule (`height: 100%` on body) collapses the page under it, and the room, which measures the canvas to step in and out of prints, would measure 1 px. The room also ignores a collapsed size when resizing.
   - `tone="light"`: the header and the walk root carry `.tone-light`, which redefines the colour tokens as dark ink on the room's off-white, so every `text-ink` / `bg-bg` class inside follows. The lightbox renders outside that scope and stays black.
 - **Geometry** (pure, [walk.ts](../src/lib/walk.ts), unit-tested): `planRoom` gives each wall its own bays, `ROOM.spacing` (3.9) centre to centre, so the longer outer wall holds more. The inner wall's bays sit half a step on. The corridor is always 6.
-  - The title takes the outer wall's bay 0. Prints fill the rest in order of angle, so walking forward passes the photos in order, on whichever wall comes next.
-  - **The room keeps its natural size** (inner radius `ROOM.innerRadius`, 12.2; 47 prints). A collection that would leave it more than half empty repeats round the walls in whole runs, as many as fill it best (`repeats`), and the room is sized to fit them exactly; 13 photos hang four times each.
-  - From about 47 photos each hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
+  - Prints fill every bay in order of angle, so walking forward passes the photos in order, on whichever wall comes next. The first hangs in the outer wall's bay 0, at angle 0, where the visitor arrives and each lap begins.
+  - **The room keeps its natural size** (inner radius `ROOM.innerRadius`, 12.2; 48 prints). A collection that would leave it more than half empty repeats round the walls in whole runs, as many as fill it best (`repeats`), and the room is sized to fit them exactly; 13 photos hang four times each.
+  - From about 48 photos each hangs once, in a room just big enough.
+  - **No gaps:** every bay holds a print. Where the smallest room (`ROOM.minInnerRadius`) is a bay too big for a collection just too large to repeat (33 photos), the outer wall spaces its prints a little wider instead.
   - Prints are **slots** (`plan.slots`, each with its `photoIndex`). The room works in slots: picking, focus, stepping, the map. Textures, labels and the lightbox work in photos. Stepping into a photo, or back out of it, uses the print the visitor stands at, else the nearest print of that photo.
   - `lightboxRect` is where the lightbox will draw a photo (its padding, the 340 px info panel, real-size cap).
   - **Angled stretches** (`facet`): each inner print hangs on a straight stretch of wall `ROOM.facetLength` (3.2) long, longer for a panorama, turned `ROOM.facetTurn` (25°) from the curve towards the visitor walking up to it. The view always faces forward, so it always sees their fronts. The near end is on the curve and the far end stands about 1.35 m out, with a short return from there straight back to the curve; in a row they make a gentle sawtooth. The walk passes more than 1.5 m clear of every tip.
@@ -101,16 +102,16 @@ A spiral ramp round an open atrium was tried and dropped: the owner chose the ri
   - The inner curve is plain plaster. Each angled stretch is lit like a bay of the outer wall, with its print's pool of light, and its return is in shade.
   - The floor is two halves, each with the spill under its own wall's prints.
   - **Wall labels:** title; then the exposure as figures with small units, like the info panel (`exposureFigures`); then place and year. Missing lines are left out.
-  - **Title wall:** the visitor arrives facing it, and passes it again each lap. It carries two lines at eye level: "Photographs by …", and the count with the year span.
+  - **No writing on the walls** apart from the labels: the room is prints all the way round. The visitor arrives facing the first print, with the corridor curving away to the left on a wide screen and the print centred on a phone.
   - **Exceptions to the hard rules below** (dark only; no gradients; no borders or shadows on photos) apply to this page only. The owner asked for a lighter room with frames on 2026-11-26 (README → Decisions).
-- **Screen:** no title over the scene (it's on the title wall).
-  - **Room map**, bottom right (under the header on phones): a ring with the title wall marked at the top and a tick per print, outside the ring for the outer wall and inside for the inner.
-  - A dot goes round clockwise as the visitor walks. The room sets `--walk-angle` every frame without React. The current print's title sits beside the map.
+- **Screen:** no title over the scene.
+  - **Room map**, bottom right (under the header on phones): a ring with a tick per print, outside the ring for the outer wall and inside for the inner. The first print is at the top.
+  - A dot goes round clockwise as the visitor walks. The room sets `--walk-angle` every frame without React. The current print's title sits beside the map, and the room's name until the visitor first walks.
   - Press or drag on the map to walk to that point, the short way round.
   - A hint at the bottom until the visitor first moves, and the caption with its buttons while standing at a print.
 - **Input:**
   - The wheel and a drag walk with exponential damping, round and round. Moves longer than `WALK.jump` (map jumps, Home) dip the view out and back in instead of spinning the camera.
-  - Keys: right, down and Page Down walk on, or move to the next print when standing at one; left, up and Page Up go back. Home returns to the title wall. Enter steps closer, then in; Escape steps back.
+  - Keys: right, down and Page Down walk on, or move to the next print when standing at one; left, up and Page Up go back. Home returns to the first print. Enter steps closer, then in; Escape steps back.
   - **Step into the photo:** View photo, Enter or a second click moves the camera square on to the print, on either wall, until it fills `lightboxRect`. The island preloads that file, then opens the lightbox, whose 250 ms fade makes the room go dark around the print.
   - While the lightbox is open, each slide change puts the camera inside that print (`standIn`), drawn once behind the lightbox. Closing (the lightbox calls `close` after its fade-out) reveals the print where the lightbox had it, then steps back out to stand in front of it. Reduced motion opens the lightbox directly.
 - **Textures:** existing sizes only, so there are no new transformations. Each photo starts as its ThumbHash, then the 480. Prints within a couple of bays of the view get the 1080, and the focused one the 1600; sharper copies are dropped when the visitor walks away.

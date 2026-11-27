@@ -1,7 +1,7 @@
 /**
  * Pure geometry for the walk-through: a ring-shaped corridor with framed prints on both walls, evenly spaced
- * along each, and the title on the outer wall, which the visitor can walk round forever. The inner prints hang
- * on short stretches of wall angled towards the visitor (`facet`). No DOM or three.js imports, so it runs in
+ * along each, which the visitor can walk round forever. The inner prints hang on short stretches of wall angled
+ * towards the visitor (`facet`). No DOM or three.js imports, so it runs in
  * unit tests. World units are roughly metres.
  *
  * Angles follow three.js's CylinderGeometry: a point at angle θ and radius r is (r·sinθ, y, r·cosθ).
@@ -50,34 +50,34 @@ export interface RoomPlan {
   innerRadius: number;
   outerRadius: number;
   walkRadius: number;
-  /** Bays round each whole wall, evenly spaced; the outer wall's bay 0 is the title. */
+  /** Bays round each whole wall, evenly spaced, a print in every one. */
   outerBays: number;
   innerBays: number;
   /** How many times each photo hangs round the room: more than once only in a small collection. */
   repeats: number;
   /** Average angle between neighbouring prints (either wall), for measuring distances in prints. */
   unit: number;
-  /** On the outer wall: the exhibition title, where the visitor arrives and each lap begins. */
-  titleAngle: number;
   /** Every print round the room, by angle: the photos in order, again and again for a small collection. */
   slots: Slot[];
 }
 
 /**
- * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them). The title takes the
- * outer wall's bay 0; prints fill the rest in order of angle, so walking forward passes the photos in order,
- * on whichever wall comes next. The inner wall's bays sit half a step on from the outer wall's.
+ * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them). Prints fill them in
+ * order of angle, so walking forward passes the photos in order, on whichever wall comes next. The first hangs
+ * in the outer wall's bay 0, at angle 0, where the visitor arrives and each lap begins; the inner wall's bays
+ * sit half a step on from the outer wall's.
  *
  * The room keeps close to its natural size. A collection that would leave it more than half empty repeats,
  * in whole runs, as many times as fills it best, and the room is sized to fit them exactly; a larger one
- * hangs once, in a room just big enough. Any spare bays (rounding) are blank wall before the title.
+ * hangs once, in a room just big enough. Every bay holds a print: where the smallest room is a bay or so too
+ * big, the outer wall spaces its prints a little wider instead of leaving a gap.
  */
 export function planRoom(count: number): RoomPlan {
   const photos = Math.max(0, count);
   const turn = Math.PI * 2;
   const bays = (r: number) => Math.floor((turn * r) / ROOM.spacing);
-  /** Prints a room of inner radius r holds, the title's bay aside. */
-  const capacity = (r: number) => bays(r) + bays(r + ROOM.corridor) - 1;
+  /** Prints a room of inner radius r holds. */
+  const capacity = (r: number) => bays(r) + bays(r + ROOM.corridor);
   const natural = capacity(ROOM.innerRadius);
   const repeats = photos > 0 && photos < natural ? Math.max(1, Math.round(natural / photos)) : 1;
   const prints = photos * repeats;
@@ -85,10 +85,10 @@ export function planRoom(count: number): RoomPlan {
   if (photos === 0) innerRadius = ROOM.innerRadius;
   while (capacity(innerRadius) < prints) innerRadius += 0.05;
   const outerRadius = innerRadius + ROOM.corridor;
-  const outerBays = bays(outerRadius);
   const innerBays = bays(innerRadius);
+  const outerBays = prints > 0 ? prints - innerBays : bays(outerRadius);
   const positions = [
-    ...Array.from({ length: outerBays - 1 }, (_, j) => ({ wall: 'outer' as Wall, angle: ((j + 1) * turn) / outerBays })),
+    ...Array.from({ length: outerBays }, (_, j) => ({ wall: 'outer' as Wall, angle: (j * turn) / outerBays })),
     ...Array.from({ length: innerBays }, (_, j) => ({ wall: 'inner' as Wall, angle: ((j + 0.5) * turn) / innerBays })),
   ].sort((x, y) => x.angle - y.angle);
   return {
@@ -99,7 +99,6 @@ export function planRoom(count: number): RoomPlan {
     innerBays,
     repeats,
     unit: turn / (outerBays + innerBays),
-    titleAngle: 0,
     slots: positions.slice(0, prints).map((p, i) => ({ photoIndex: i % Math.max(1, photos), ...p })),
   };
 }

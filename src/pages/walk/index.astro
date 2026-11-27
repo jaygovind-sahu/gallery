@@ -2,8 +2,8 @@
 /**
  * The walk-through: every published photo, by sort_order, framed and hung round a ring-shaped room the visitor can
  * walk forever. Categories are chosen in the grid, so the header here shows only the site name
- * (`nav={null}`) and a Grid button, the mirror of the Walk button on grid pages. The exhibition's title is
- * lettered on the room's title wall, so there is no title over the scene.
+ * (`nav={null}`) and a Grid button, the mirror of the Walk button on grid pages. There is no title over the
+ * scene, and none on the walls: the room is prints all the way round.
  *
  * Base runs `immersive` (no footer or page scroll; the header floats over the room) and in the light tone.
  * The island is `client:only`, so three.js stays out of the Worker.
@@ -39,7 +39,7 @@ const ogImage = preview
   </a>
   <h1 class="sr-only">Walk-through of all photos</h1>
   <div class="absolute inset-0">
-    <WalkGallery client:only="react" photos={photos} heading="Jay’s Gallery" byline="Photographs by Jaygovind Sahu" gridUrl="/all">
+    <WalkGallery client:only="react" photos={photos} heading="Jay’s Gallery" gridUrl="/all">
       <div slot="fallback" class="walk tone-light relative h-full w-full bg-bg">
         <noscript>
           <p class="absolute inset-x-0 bottom-10 m-0 px-4 text-center text-sm text-ink-muted">
