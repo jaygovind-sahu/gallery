@@ -1,7 +1,8 @@
 /**
- * Pure geometry for the walk-through: a ring-shaped corridor with framed prints evenly spaced along its outer
- * wall, the title among them, which the visitor can walk round forever. The inner wall carries a pencil
- * drawing and no prints. No DOM or three.js imports, so it runs in unit tests. World units are roughly metres.
+ * Pure geometry for the walk-through: a ring-shaped corridor with framed prints on both walls, evenly spaced
+ * along each, and the title on the outer wall, which the visitor can walk round forever. The inner prints hang
+ * on short stretches of wall angled towards the visitor (`facet`). No DOM or three.js imports, so it runs in
+ * unit tests. World units are roughly metres.
  *
  * Angles follow three.js's CylinderGeometry: a point at angle θ and radius r is (r·sinθ, y, r·cosθ).
  * Walking forward increases the angle; the inner wall is then on the visitor's left.
@@ -15,21 +16,25 @@ export const ROOM = {
   wallHeight: 4.6,
   /**
    * The room's natural size: its inner wall's radius, a gentle curve with the visitor walking well clear of
-   * it. A collection too small to fill it repeats round the wall, as an exhibition hang does; a large one
+   * it. A collection too small to fill it repeats round the walls, as an exhibition hang does; a large one
    * grows the room.
    */
   innerRadius: 12.2,
   /** A collection that nearly fills the natural room shrinks it a little, never below this. */
   minInnerRadius: 8,
-  /** Centre to centre along the outer wall: the widest frame and a generous gap. */
+  /** Centre to centre along either wall: the widest frame and a generous gap. Both walls keep it. */
   spacing: 3.9,
   /** Height of a print's centre, and of the visitor's eyes while walking. */
   photoY: 1.92,
   eyeY: 1.72,
   /** Where along the corridor the visitor walks: 0 is the inner wall, 1 the outer. */
   walkLane: 0.58,
-  /** How much of the view's width the inner wall takes while walking, at eye level: a sliver at the left. */
-  innerShare: 0.08,
+  /**
+   * How far each inner print's stretch of wall turns from the curve towards the visitor walking up to it
+   * (radians, 25°), and how long it is: the widest landscape frame with room either side. A panorama's is longer.
+   */
+  facetTurn: 0.44,
+  facetLength: 3.2,
   /** White mat around each print, with a little extra at the bottom as framers do. */
   mat: 0.16,
   matBottom: 0.04,
@@ -37,6 +42,7 @@ export const ROOM = {
 
 export interface Slot {
   photoIndex: number;
+  wall: Wall;
   angle: number;
 }
 
@@ -44,21 +50,23 @@ export interface RoomPlan {
   innerRadius: number;
   outerRadius: number;
   walkRadius: number;
-  /** Bays round the outer wall, evenly spaced; bay 0 is the title. */
-  bays: number;
+  /** Bays round each whole wall, evenly spaced; the outer wall's bay 0 is the title. */
+  outerBays: number;
+  innerBays: number;
   /** How many times each photo hangs round the room: more than once only in a small collection. */
   repeats: number;
-  /** Angle between neighbouring bays, for measuring distances in prints. */
+  /** Average angle between neighbouring prints (either wall), for measuring distances in prints. */
   unit: number;
-  /** The exhibition title, where the visitor arrives and each lap begins. */
+  /** On the outer wall: the exhibition title, where the visitor arrives and each lap begins. */
   titleAngle: number;
   /** Every print round the room, by angle: the photos in order, again and again for a small collection. */
   slots: Slot[];
 }
 
 /**
- * Bays every `ROOM.spacing` along the outer wall. The title takes bay 0; prints fill the rest in order, so
- * walking forward passes the photos in order.
+ * Bays every `ROOM.spacing` along each wall (so the longer outer wall has more of them). The title takes the
+ * outer wall's bay 0; prints fill the rest in order of angle, so walking forward passes the photos in order,
+ * on whichever wall comes next. The inner wall's bays sit half a step on from the outer wall's.
  *
  * The room keeps close to its natural size. A collection that would leave it more than half empty repeats,
  * in whole runs, as many times as fills it best, and the room is sized to fit them exactly; a larger one
@@ -67,38 +75,122 @@ export interface RoomPlan {
 export function planRoom(count: number): RoomPlan {
   const photos = Math.max(0, count);
   const turn = Math.PI * 2;
-  /** Bays round the outer wall of a room of inner radius r. */
-  const bays = (r: number) => Math.floor((turn * (r + ROOM.corridor)) / ROOM.spacing);
+  const bays = (r: number) => Math.floor((turn * r) / ROOM.spacing);
   /** Prints a room of inner radius r holds, the title's bay aside. */
-  const capacity = (r: number) => bays(r) - 1;
+  const capacity = (r: number) => bays(r) + bays(r + ROOM.corridor) - 1;
   const natural = capacity(ROOM.innerRadius);
   const repeats = photos > 0 && photos < natural ? Math.max(1, Math.round(natural / photos)) : 1;
   const prints = photos * repeats;
   let innerRadius: number = photos >= natural ? ROOM.innerRadius : ROOM.minInnerRadius;
   if (photos === 0) innerRadius = ROOM.innerRadius;
   while (capacity(innerRadius) < prints) innerRadius += 0.05;
-  const n = bays(innerRadius);
+  const outerRadius = innerRadius + ROOM.corridor;
+  const outerBays = bays(outerRadius);
+  const innerBays = bays(innerRadius);
+  const positions = [
+    ...Array.from({ length: outerBays - 1 }, (_, j) => ({ wall: 'outer' as Wall, angle: ((j + 1) * turn) / outerBays })),
+    ...Array.from({ length: innerBays }, (_, j) => ({ wall: 'inner' as Wall, angle: ((j + 0.5) * turn) / innerBays })),
+  ].sort((x, y) => x.angle - y.angle);
   return {
     innerRadius,
-    outerRadius: innerRadius + ROOM.corridor,
+    outerRadius,
     walkRadius: innerRadius + ROOM.corridor * ROOM.walkLane,
-    bays: n,
+    outerBays,
+    innerBays,
     repeats,
-    unit: turn / n,
+    unit: turn / (outerBays + innerBays),
     titleAngle: 0,
-    slots: Array.from({ length: prints }, (_, i) => ({ photoIndex: i % Math.max(1, photos), angle: ((i + 1) * turn) / n })),
+    slots: positions.slice(0, prints).map((p, i) => ({ photoIndex: i % Math.max(1, photos), ...p })),
   };
 }
 
+export interface Point {
+  x: number;
+  z: number;
+}
+
+/** Where a print hangs: the point on the wall behind its centre, and the wall's normal into the corridor. */
+export interface Mount extends Point {
+  nx: number;
+  nz: number;
+}
+
+/** A place on the concave outer wall, at angle θ: it faces the centre of the room. */
+export function outerMount(radius: number, angle: number): Mount {
+  const s = Math.sin(angle);
+  const c = Math.cos(angle);
+  return { x: radius * s, z: radius * c, nx: -s, nz: -c };
+}
+
+/** An inner print's stretch of wall, seen from above. */
+export interface Facet {
+  /** Where it leaves the curved wall, on the side the visitor walks up from. */
+  start: Point;
+  /** Its far end, standing out into the corridor. */
+  tip: Point;
+  /** Where the short return from the tip meets the curved wall again. */
+  foot: Point;
+  /** The middle of its face, where the print hangs. */
+  mount: Mount;
+  /** How far from the centre of the room the tip stands. */
+  reach: number;
+}
+
 /**
- * How far the walking view turns from the direction of travel towards the inner wall, so the inner wall takes
- * `share` of the view's width at eye level and the outer wall, with the prints, the rest. Lines of sight more
- * than `acos(inner radius / walk radius)` left of the way ahead meet the inner wall. `tanHalfWidth` is the
- * tangent of half the horizontal field of view, so a narrow portrait screen turns further than a wide one.
+ * The stretch of inner wall an inner print hangs on, `length` long and centred at angle θ. The curved inner
+ * wall is convex, so a print hung flat on it faces the visitor only once they are beside it, outside a
+ * portrait phone's view. This stretch is straight and turned `ROOM.facetTurn` from the curve towards the
+ * visitor walking up to it (forward, the way the view always faces): its near end on the curve, its far end
+ * standing out, and a short return from there straight back to the curve. In a row they make a gentle sawtooth.
  */
-export function walkYaw(plan: Pick<RoomPlan, 'innerRadius' | 'walkRadius'>, tanHalfWidth: number, share: number = ROOM.innerShare): number {
-  const tangent = Math.acos(plan.innerRadius / plan.walkRadius);
-  return tangent - Math.atan((1 - 2 * share) * tanHalfWidth);
+export function facet(innerRadius: number, angle: number, length: number = ROOM.facetLength): Facet {
+  const turn = ROOM.facetTurn;
+  const s = Math.sin(angle);
+  const c = Math.cos(angle);
+  const half = length / 2;
+  const across = half * Math.cos(turn);
+  // The face's middle, out from the centre far enough that its near end lands on the curve.
+  const out = Math.sqrt(Math.max(0, innerRadius ** 2 - across ** 2)) + half * Math.sin(turn);
+  // Along the face (forward and outward), and its normal (outward and back towards the visitor).
+  const dx = Math.cos(turn) * c + Math.sin(turn) * s;
+  const dz = -Math.cos(turn) * s + Math.sin(turn) * c;
+  const mount = { x: out * s, z: out * c, nx: Math.cos(turn) * s - Math.sin(turn) * c, nz: Math.cos(turn) * c + Math.sin(turn) * s };
+  const start = { x: mount.x - dx * half, z: mount.z - dz * half };
+  const tip = { x: mount.x + dx * half, z: mount.z + dz * half };
+  const reach = Math.hypot(tip.x, tip.z);
+  return { start, tip, foot: { x: (tip.x * innerRadius) / reach, z: (tip.z * innerRadius) / reach }, mount, reach };
+}
+
+/**
+ * How far from the centre of the room the inner wall's corridor side is at angle θ: the curve, or an angled
+ * stretch standing out from it. Camera poses stay outside this.
+ */
+export function innerSurface(innerRadius: number, facets: readonly Facet[], angle: number): number {
+  const ux = Math.sin(angle);
+  const uz = Math.cos(angle);
+  let surface = innerRadius;
+  for (const f of facets) {
+    const ex = f.tip.x - f.start.x;
+    const ez = f.tip.z - f.start.z;
+    const denom = ux * ez - uz * ex;
+    if (Math.abs(denom) < 1e-9) continue;
+    const t = (f.start.x * ez - f.start.z * ex) / denom;
+    const along = (f.start.x * uz - f.start.z * ux) / denom;
+    if (t > 0 && along >= 0 && along <= 1) surface = Math.max(surface, t);
+  }
+  return surface;
+}
+
+/**
+ * How far the walking view turns from the direction of travel towards the inner wall: 0.3 on a wide screen, as
+ * in the example the room started from, up to 0.4 on a narrow portrait one. That brings each inner print into
+ * view at the left as the visitor walks up to it, while the outer wall's run keeps the middle and right of the
+ * screen; turned further, the inner wall took over a phone's view. `tanHalfWidth` is the tangent of half the
+ * horizontal field of view.
+ */
+export function walkYaw(tanHalfWidth: number): number {
+  const t = Math.min(1, Math.max(0, (tanHalfWidth - 0.32) / (0.85 - 0.32)));
+  return 0.4 - 0.1 * t;
 }
 
 /** How far ahead of the visitor, as an angle, the print they are walking up to hangs. */
@@ -135,16 +227,29 @@ export function nearestEquivalent(target: number, current: number): number {
   return target + Math.round((current - target) / turn) * turn;
 }
 
+/** How much of the view's height and width a print (with its label) fills while the visitor stands at it. */
+export const FOCUS_FILL = { h: 0.6, w: 0.74 } as const;
+
 /**
  * How far from the wall to stand so the print fills at most `fill` of the view's height and width,
  * capped so the visitor stays inside a corridor `corridor` wide.
  */
-export function focusDistance(w: number, h: number, fovYDeg: number, aspect: number, corridor: number = ROOM.corridor, fill = { h: 0.6, w: 0.74 }): number {
+export function focusDistance(w: number, h: number, fovYDeg: number, aspect: number, corridor: number = ROOM.corridor, fill = FOCUS_FILL): number {
   const tanY = Math.tan((fovYDeg * Math.PI) / 360);
   const tanX = tanY * aspect;
   const byHeight = h / fill.h / (2 * tanY);
   const byWidth = w / fill.w / (2 * tanX);
   return Math.min(Math.max(byHeight, byWidth, 2.2), corridor - 0.35);
+}
+
+/**
+ * The vertical field of view, never narrower than `fovYDeg`, at which a print w × h seen from `distance`
+ * fills at most `fill` of the view: wider only when the opposite wall stops the visitor stepping back far
+ * enough, as for a wide print on a narrow portrait screen.
+ */
+export function fovToFit(w: number, h: number, distance: number, aspect: number, fovYDeg: number, fill = FOCUS_FILL): number {
+  const tanY = Math.max(Math.tan((fovYDeg * Math.PI) / 360), h / fill.h / (2 * distance), w / fill.w / (2 * distance) / aspect);
+  return (Math.atan(tanY) * 360) / Math.PI;
 }
 
 export interface Rect {
